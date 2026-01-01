@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.database import get_db, User, Application, GrantProgram, ApplicationStatus
 from app.api.auth import get_current_user
@@ -42,6 +42,19 @@ class ApplicationListResponse(BaseModel):
     applications: List[ApplicationResponse]
 
 
+# ============ Helpers ============
+
+def build_app_response(app: Application) -> ApplicationResponse:
+    """Build ApplicationResponse from Application model."""
+    return ApplicationResponse(
+        id=app.id, program_id=app.program_id,
+        program_name=app.program.name if app.program else "Unknown",
+        status=app.status.value, completeness_score=app.completeness_score or 0,
+        created_at=app.created_at.isoformat(), updated_at=app.updated_at.isoformat(),
+        submitted_at=app.submitted_at.isoformat() if app.submitted_at else None
+    )
+
+
 # ============ Endpoints ============
 
 @router.get("/", response_model=ApplicationListResponse)
@@ -51,28 +64,14 @@ async def list_applications(
     db: Session = Depends(get_db)
 ):
     """List user's applications."""
-    query = db.query(Application).filter(Application.user_id == current_user.id)
-
+    query = db.query(Application).options(joinedload(Application.program)).filter(
+        Application.user_id == current_user.id
+    )
     if status:
         query = query.filter(Application.status == status)
-
     apps = query.order_by(Application.updated_at.desc()).all()
-
     return ApplicationListResponse(
-        total=len(apps),
-        applications=[
-            ApplicationResponse(
-                id=a.id,
-                program_id=a.program_id,
-                program_name=a.program.name if a.program else "Unknown",
-                status=a.status.value,
-                completeness_score=a.completeness_score or 0,
-                created_at=a.created_at.isoformat(),
-                updated_at=a.updated_at.isoformat(),
-                submitted_at=a.submitted_at.isoformat() if a.submitted_at else None
-            )
-            for a in apps
-        ]
+        total=len(apps), applications=[build_app_response(a) for a in apps]
     )
 
 
@@ -98,24 +97,12 @@ async def create_application(
     if existing:
         raise HTTPException(status_code=400, detail="You already have a draft application for this program")
 
-    app = Application(
-        user_id=current_user.id,
-        program_id=data.program_id
-    )
+    app = Application(user_id=current_user.id, program_id=data.program_id)
     db.add(app)
     db.commit()
     db.refresh(app)
-
-    return ApplicationResponse(
-        id=app.id,
-        program_id=app.program_id,
-        program_name=program.name,
-        status=app.status.value,
-        completeness_score=0,
-        created_at=app.created_at.isoformat(),
-        updated_at=app.updated_at.isoformat(),
-        submitted_at=None
-    )
+    app.program = program  # Set program for build_app_response
+    return build_app_response(app)
 
 
 @router.get("/{app_id}", response_model=ApplicationResponse)
@@ -125,24 +112,12 @@ async def get_application(
     db: Session = Depends(get_db)
 ):
     """Get a specific application."""
-    app = db.query(Application).filter(
-        Application.id == app_id,
-        Application.user_id == current_user.id
+    app = db.query(Application).options(joinedload(Application.program)).filter(
+        Application.id == app_id, Application.user_id == current_user.id
     ).first()
-
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
-
-    return ApplicationResponse(
-        id=app.id,
-        program_id=app.program_id,
-        program_name=app.program.name if app.program else "Unknown",
-        status=app.status.value,
-        completeness_score=app.completeness_score or 0,
-        created_at=app.created_at.isoformat(),
-        updated_at=app.updated_at.isoformat(),
-        submitted_at=app.submitted_at.isoformat() if app.submitted_at else None
-    )
+    return build_app_response(app)
 
 
 @router.patch("/{app_id}", response_model=ApplicationResponse)
@@ -153,18 +128,14 @@ async def update_application(
     db: Session = Depends(get_db)
 ):
     """Update an application."""
-    app = db.query(Application).filter(
-        Application.id == app_id,
-        Application.user_id == current_user.id
+    app = db.query(Application).options(joinedload(Application.program)).filter(
+        Application.id == app_id, Application.user_id == current_user.id
     ).first()
-
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
 
     if updates.form_data:
         app.form_data = json.dumps(updates.form_data)
-        # TODO: Recalculate completeness score
-
     if updates.status:
         app.status = updates.status
         if updates.status == ApplicationStatus.SUBMITTED:
@@ -172,17 +143,7 @@ async def update_application(
 
     db.commit()
     db.refresh(app)
-
-    return ApplicationResponse(
-        id=app.id,
-        program_id=app.program_id,
-        program_name=app.program.name if app.program else "Unknown",
-        status=app.status.value,
-        completeness_score=app.completeness_score or 0,
-        created_at=app.created_at.isoformat(),
-        updated_at=app.updated_at.isoformat(),
-        submitted_at=app.submitted_at.isoformat() if app.submitted_at else None
-    )
+    return build_app_response(app)
 
 
 @router.delete("/{app_id}")

@@ -7,14 +7,12 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 
 from app.models.database import get_db, User
 from app.config.settings import settings
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 
@@ -39,6 +37,12 @@ class Token(BaseModel):
     token_type: str
 
 
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+
 class AppleSignInRequest(BaseModel):
     identity_token: str
     authorization_code: str
@@ -58,11 +62,11 @@ def create_access_token(data: dict) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
 async def get_current_user(
@@ -91,12 +95,12 @@ async def get_current_user(
 
 # ============ Endpoints ============
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=AuthResponse)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Register with email/password."""
+    """Register with email/password and return token."""
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     user = User(
         email=user_data.email,
@@ -105,10 +109,17 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+
+    # Auto-login: generate token
+    token = create_access_token({"sub": user.id})
+    return AuthResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse(id=user.id, email=user.email, subscription_tier=user.subscription_tier or "free")
+    )
 
 
-@router.post("/token", response_model=Token)
+@router.post("/token", response_model=AuthResponse)
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
@@ -116,15 +127,27 @@ async def login(
     """Login with email/password."""
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not user.hashed_password:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     if not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     user.last_login_at = datetime.utcnow()
     db.commit()
 
     token = create_access_token({"sub": user.id})
-    return {"access_token": token, "token_type": "bearer"}
+    return AuthResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse(id=user.id, email=user.email, subscription_tier=user.subscription_tier or "free")
+    )
 
 
 @router.post("/apple", response_model=Token)

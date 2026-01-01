@@ -58,19 +58,23 @@ class ProfileResponse(BaseModel):
 
 def calculate_profile_completeness(profile: UserProfile) -> float:
     """Calculate how complete a profile is."""
-    fields = [
-        profile.full_name,
-        profile.organization_name,
-        profile.address,
-        profile.city,
-        profile.state,
-        profile.zip_code,
-        profile.phone,
-        profile.ein,
-        profile.uei_number,
-    ]
-    filled = sum(1 for f in fields if f)
-    return round((filled / len(fields)) * 100, 1)
+    fields = [profile.full_name, profile.organization_name, profile.address,
+              profile.city, profile.state, profile.zip_code, profile.phone,
+              profile.ein, profile.uei_number]
+    return round((sum(1 for f in fields if f) / len(fields)) * 100, 1)
+
+
+def build_profile_response(profile: UserProfile) -> ProfileResponse:
+    """Build ProfileResponse from UserProfile model."""
+    return ProfileResponse(
+        id=profile.id, full_name=profile.full_name,
+        organization_name=profile.organization_name, organization_type=profile.organization_type,
+        address=profile.address, city=profile.city, state=profile.state,
+        zip_code=profile.zip_code, congressional_district=profile.congressional_district,
+        ein=profile.ein, uei_number=profile.uei_number,
+        sam_registered=profile.sam_registered or False, is_rural=profile.is_rural,
+        completeness=calculate_profile_completeness(profile)
+    )
 
 
 # ============ Endpoints ============
@@ -90,22 +94,7 @@ async def get_profile(
         db.commit()
         db.refresh(profile)
 
-    return ProfileResponse(
-        id=profile.id,
-        full_name=profile.full_name,
-        organization_name=profile.organization_name,
-        organization_type=profile.organization_type,
-        address=profile.address,
-        city=profile.city,
-        state=profile.state,
-        zip_code=profile.zip_code,
-        congressional_district=profile.congressional_district,
-        ein=profile.ein,
-        uei_number=profile.uei_number,
-        sam_registered=profile.sam_registered or False,
-        is_rural=profile.is_rural,
-        completeness=calculate_profile_completeness(profile)
-    )
+    return build_profile_response(profile)
 
 
 @router.patch("/profile", response_model=ProfileResponse)
@@ -126,20 +115,4 @@ async def update_profile(
 
     db.commit()
     db.refresh(profile)
-
-    return ProfileResponse(
-        id=profile.id,
-        full_name=profile.full_name,
-        organization_name=profile.organization_name,
-        organization_type=profile.organization_type,
-        address=profile.address,
-        city=profile.city,
-        state=profile.state,
-        zip_code=profile.zip_code,
-        congressional_district=profile.congressional_district,
-        ein=profile.ein,
-        uei_number=profile.uei_number,
-        sam_registered=profile.sam_registered or False,
-        is_rural=profile.is_rural,
-        completeness=calculate_profile_completeness(profile)
-    )
+    return build_profile_response(profile)

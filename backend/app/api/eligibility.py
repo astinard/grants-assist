@@ -1,6 +1,6 @@
 """Eligibility API - Check user eligibility for programs."""
 from typing import List, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -120,8 +120,6 @@ async def check_program_eligibility_endpoint(
     db: Session = Depends(get_db)
 ):
     """Check eligibility for a specific program."""
-    from fastapi import HTTPException
-
     profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
     program = db.query(GrantProgram).filter(GrantProgram.id == program_id).first()
 
