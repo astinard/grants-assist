@@ -1,0 +1,36 @@
+name: GrantsAssist
+options:
+  bundleIdPrefix: com.grantsassist
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  GrantsAssist:
+    type: application
+    platform: iOS
+    sources:
+      - path: GrantsAssist
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        INFOPLIST_FILE: GrantsAssist/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.grantsassist.app
+        CODE_SIGN_ENTITLEMENTS: GrantsAssist/GrantsAssist.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    entitlements:
+      path: GrantsAssist/GrantsAssist.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
