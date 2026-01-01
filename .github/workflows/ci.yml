@@ -64,3 +64,12 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
             | xcpretty || true
+
+      - name: Run iOS Tests
+        run: |
+          xcodebuild test \
+            -project GrantsAssist.xcodeproj \
+            -scheme GrantsAssistTests \
+            -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty --test || true

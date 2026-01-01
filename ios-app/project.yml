@@ -34,3 +34,17 @@ targets:
       properties:
         com.apple.developer.applesignin:
           - Default
+
+  GrantsAssistTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: GrantsAssistTests
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: GrantsAssist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.grantsassist.tests
+        GENERATE_INFOPLIST_FILE: YES
