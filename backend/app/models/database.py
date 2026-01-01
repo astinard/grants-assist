@@ -2,13 +2,11 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean, DateTime, Text,
     ForeignKey, Enum as SQLEnum, create_engine
 )
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Session
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 from app.config.settings import settings
 

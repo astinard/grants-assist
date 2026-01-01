@@ -98,7 +98,7 @@ async def check_eligibility(
             programs=[]
         )
 
-    programs = db.query(GrantProgram).filter(GrantProgram.is_active == True).all()
+    programs = db.query(GrantProgram).filter(GrantProgram.is_active.is_(True)).all()
 
     results = [check_program_eligibility(profile, p) for p in programs]
     eligible_count = sum(1 for r in results if r.eligible)

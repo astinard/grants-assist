@@ -1,6 +1,6 @@
 """Grant programs API."""
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -61,7 +61,7 @@ async def list_programs(
     query = db.query(GrantProgram)
 
     if active_only:
-        query = query.filter(GrantProgram.is_active == True)
+        query = query.filter(GrantProgram.is_active.is_(True))
 
     if category:
         query = query.filter(GrantProgram.category == category)
