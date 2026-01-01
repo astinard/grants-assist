@@ -1,0 +1,14 @@
+# App identifier (bundle ID)
+app_identifier("com.grantsassist.app")
+
+# Your Apple Developer Portal username
+apple_id(ENV["APPLE_ID"] || "your-apple-id@example.com")
+
+# Your App Store Connect Team ID (find at https://appstoreconnect.apple.com)
+itc_team_id(ENV["ITC_TEAM_ID"])
+
+# Your Developer Portal Team ID (find at https://developer.apple.com/account)
+team_id(ENV["TEAM_ID"])
+
+# For more information about the Appfile, see:
+# https://docs.fastlane.tools/advanced/#appfile
