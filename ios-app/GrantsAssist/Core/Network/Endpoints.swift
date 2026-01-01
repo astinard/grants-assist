@@ -190,3 +190,65 @@ enum EligibilityEndpoint: APIEndpoint {
 
     var method: HTTPMethod { .get }
 }
+
+// MARK: - Notification Endpoints
+enum NotificationEndpoints: APIEndpoint {
+    case registerDevice(token: String, platform: String)
+    case unregisterDevice(token: String)
+    case getPreferences
+    case updatePreferences(NotificationPreferences)
+
+    var path: String {
+        switch self {
+        case .registerDevice: return "/api/notifications/device"
+        case .unregisterDevice: return "/api/notifications/device"
+        case .getPreferences: return "/api/notifications/preferences"
+        case .updatePreferences: return "/api/notifications/preferences"
+        }
+    }
+
+    var method: HTTPMethod {
+        switch self {
+        case .registerDevice: return .post
+        case .unregisterDevice: return .delete
+        case .getPreferences: return .get
+        case .updatePreferences: return .patch
+        }
+    }
+
+    var body: Data? {
+        switch self {
+        case .registerDevice(let token, let platform):
+            return try? sharedEncoder.encode([
+                "device_token": token,
+                "platform": platform
+            ])
+        case .unregisterDevice(let token):
+            return try? sharedEncoder.encode(["device_token": token])
+        case .updatePreferences(let prefs):
+            return try? sharedEncoder.encode(prefs)
+        default:
+            return nil
+        }
+    }
+}
+
+// MARK: - Notification Models
+struct NotificationPreferences: Codable {
+    var deadlineReminders: Bool
+    var applicationUpdates: Bool
+    var newGrantAlerts: Bool
+    var reminderDaysBefore: [Int]
+
+    init(
+        deadlineReminders: Bool = true,
+        applicationUpdates: Bool = true,
+        newGrantAlerts: Bool = false,
+        reminderDaysBefore: [Int] = [7, 3, 1]
+    ) {
+        self.deadlineReminders = deadlineReminders
+        self.applicationUpdates = applicationUpdates
+        self.newGrantAlerts = newGrantAlerts
+        self.reminderDaysBefore = reminderDaysBefore
+    }
+}

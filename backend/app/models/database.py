@@ -177,6 +177,44 @@ class Application(Base):
     program = relationship("GrantProgram", back_populates="applications")
 
 
+class DeviceToken(Base):
+    """Device tokens for push notifications."""
+    __tablename__ = "device_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    device_token = Column(String(255), nullable=False, index=True)
+    platform = Column(String(20), nullable=False)  # "ios" or "android"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="device_tokens")
+
+
+class NotificationPreference(Base):
+    """User notification preferences."""
+    __tablename__ = "notification_preferences"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, unique=True)
+
+    # Notification types
+    deadline_reminders = Column(Boolean, default=True)
+    application_updates = Column(Boolean, default=True)
+    new_grant_alerts = Column(Boolean, default=False)
+
+    # Reminder timing (JSON array of days before deadline)
+    reminder_days_before = Column(Text, default="[7, 3, 1]")
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="notification_preferences")
+
+
 # ============ Database Setup ============
 
 engine = create_engine(settings.database_url, echo=settings.debug)

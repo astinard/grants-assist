@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # RevenueCat (for subscription validation)
     revenuecat_api_key: str = ""
 
+    # Apple Push Notifications (APNs)
+    apns_team_id: str = ""
+    apns_key_id: str = ""
+    apns_bundle_id: str = "com.grantsassist.app"
+    apns_key_path: str = ""  # Path to .p8 key file
+    apns_use_sandbox: bool = True
+
     class Config:
         env_file = ".env"
 

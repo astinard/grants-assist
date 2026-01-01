@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, users, programs, applications, eligibility
+from app.api import auth, users, programs, applications, eligibility, notifications
 from app.config.settings import settings
 from app.models.database import init_db
+from app.services.scheduler import start_scheduler, shutdown_scheduler
 
 VERSION = "0.1.0"
 
@@ -16,7 +17,9 @@ async def lifespan(app: FastAPI):
     print("GrantsAssist API starting...")
     init_db()
     print("Database ready")
+    start_scheduler()
     yield
+    shutdown_scheduler()
 
 
 app = FastAPI(
@@ -41,6 +44,7 @@ app.include_router(users.router)
 app.include_router(programs.router)
 app.include_router(applications.router)
 app.include_router(eligibility.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health")

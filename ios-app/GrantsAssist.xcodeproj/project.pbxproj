@@ -24,6 +24,7 @@
 		5D8296779C60949073F480D2 /* EligibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D9575BFDA674526F09203C2 /* EligibilityTests.swift */; };
 		70F4E7F68CB2A8CCDF230C41 /* ApplicationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077F6FE254D0E2C5CEE1CD6C /* ApplicationsViewModel.swift */; };
 		7AE1FB7991A70DDD3D944377 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 561ADA2BC0A67BA61B93EF03 /* AuthView.swift */; };
+		82638FD941D21FA4CEB27FAE /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D788897F210E2FBA70487A /* NotificationService.swift */; };
 		8A6AB4CD5EA76D7DD2F13809 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED92F07A9852E8B8EAABEEE7 /* EmptyStateView.swift */; };
 		8E6622E5242B25C1F128B508 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A66A3404CE2F66AA4E11784D /* RootView.swift */; };
 		A974BEC6C7B8410432581F35 /* GrantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4420EB378E85A27E6C3656D0 /* GrantTests.swift */; };
@@ -72,6 +73,7 @@
 		7D9575BFDA674526F09203C2 /* EligibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EligibilityTests.swift; sourceTree = "<group>"; };
 		7EA1683BC8E956ACFAEC0921 /* Grant.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Grant.swift; sourceTree = "<group>"; };
 		8F8FCCE0CE068870E098D8A6 /* Application.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Application.swift; sourceTree = "<group>"; };
+		99D788897F210E2FBA70487A /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		9A16A0E74908D8CDCBE1398B /* ProgramDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgramDetailView.swift; sourceTree = "<group>"; };
 		A4EED862194E67BFECAA5D11 /* LoadingButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingButton.swift; sourceTree = "<group>"; };
 		A66A3404CE2F66AA4E11784D /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 			children = (
 				599843A8F8A41ED7856B6C9E /* AuthService.swift */,
 				BEB2C52E3338E4D377171DFE /* KeychainService.swift */,
+				99D788897F210E2FBA70487A /* NotificationService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -388,6 +391,7 @@
 				FEB7B659DFCE3D181BA2C356 /* GrantsAssistApp.swift in Sources */,
 				0FBD69CC512236C83565497E /* KeychainService.swift in Sources */,
 				2DBC248451136750625A7615 /* LoadingButton.swift in Sources */,
+				82638FD941D21FA4CEB27FAE /* NotificationService.swift in Sources */,
 				5A33825CF4391DFB730A7841 /* ProfileView.swift in Sources */,
 				E343E8C031A88655FB079957 /* ProgramDetailView.swift in Sources */,
 				8E6622E5242B25C1F128B508 /* RootView.swift in Sources */,
