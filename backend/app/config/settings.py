@@ -32,7 +32,8 @@ class Settings(BaseSettings):
     apns_team_id: str = ""
     apns_key_id: str = ""
     apns_bundle_id: str = "com.grantsassist.app"
-    apns_key_path: str = ""  # Path to .p8 key file
+    apns_key_path: str = ""  # Path to .p8 key file (local dev)
+    apns_key_content: str = ""  # .p8 key content directly (for Railway/cloud)
     apns_use_sandbox: bool = True
 
     class Config:

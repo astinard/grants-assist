@@ -23,6 +23,7 @@ class APNsService:
         self.key_id = settings.apns_key_id
         self.bundle_id = settings.apns_bundle_id
         self.key_path = settings.apns_key_path
+        self.key_content = settings.apns_key_content
         self.use_sandbox = settings.apns_use_sandbox
         self._token: Optional[str] = None
         self._token_expires: float = 0
@@ -36,12 +37,21 @@ class APNsService:
         if self._token and time.time() < self._token_expires:
             return self._token
 
-        # Read private key
-        try:
-            with open(self.key_path, 'r') as f:
-                private_key = f.read()
-        except FileNotFoundError:
-            raise ValueError(f"APNs key file not found: {self.key_path}")
+        # Get private key from env var or file
+        private_key = None
+        if self.key_content:
+            # Use key content directly (for Railway/cloud deployment)
+            private_key = self.key_content.replace("\\n", "\n")
+        elif self.key_path:
+            # Read from file (for local development)
+            try:
+                with open(self.key_path, 'r') as f:
+                    private_key = f.read()
+            except FileNotFoundError:
+                raise ValueError(f"APNs key file not found: {self.key_path}")
+
+        if not private_key:
+            raise ValueError("APNs key not configured (set APNS_KEY_CONTENT or APNS_KEY_PATH)")
 
         # Generate JWT
         headers = {
@@ -68,7 +78,8 @@ class APNsService:
         sound: str = "default"
     ) -> bool:
         """Send a push notification to a single device."""
-        if not all([self.team_id, self.key_id, self.bundle_id, self.key_path]):
+        has_key = bool(self.key_path or self.key_content)
+        if not all([self.team_id, self.key_id, self.bundle_id, has_key]):
             print("APNs not configured, skipping push notification")
             return False
 
