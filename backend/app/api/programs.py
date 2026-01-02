@@ -1,10 +1,13 @@
 """Grant programs API."""
 from typing import List, Optional
+import io
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.models.database import get_db, GrantProgram, GrantCategory
+from app.services.pdf_generator import generate_grant_summary_pdf
 
 router = APIRouter(prefix="/api/programs", tags=["Grant Programs"])
 
@@ -97,6 +100,38 @@ async def get_program(program_id: str, db: Session = Depends(get_db)):
     if not program:
         raise HTTPException(status_code=404, detail="Program not found")
     return build_program_response(program)
+
+
+@router.get("/{program_id}/pdf")
+async def download_program_pdf(program_id: str, db: Session = Depends(get_db)):
+    """Download grant program summary as PDF."""
+    program = db.query(GrantProgram).filter(GrantProgram.id == program_id).first()
+    if not program:
+        raise HTTPException(status_code=404, detail="Program not found")
+
+    program_data = {
+        "id": program.id,
+        "name": program.name,
+        "agency": program.agency,
+        "category": program.category.value if program.category else None,
+        "description": program.description,
+        "eligibility_summary": program.eligibility_summary,
+        "min_award": program.min_award,
+        "max_award": program.max_award,
+        "match_required": program.match_required,
+        "deadline": program.deadline.isoformat() if program.deadline else None,
+        "rolling_deadline": program.rolling_deadline,
+        "program_url": program.program_url,
+    }
+
+    pdf_buffer = generate_grant_summary_pdf(program_data)
+
+    filename = f"grant_{program.id}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_buffer),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.post("/seed")

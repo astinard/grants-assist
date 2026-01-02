@@ -113,6 +113,21 @@ struct ApplicationUpdateRequest: Codable {
     var formData: [String: AnyCodable]?
 }
 
+// MARK: - Form Data Response
+struct FormDataResponse: Codable {
+    let applicationId: String
+    let programId: String
+    let programName: String
+    let formData: [String: AnyCodable]
+    let status: String
+}
+
+// MARK: - Narratives Response
+struct NarrativesResponse: Codable {
+    let sections: [String: String]
+    let message: String
+}
+
 // MARK: - AnyCodable (for flexible JSON)
 struct AnyCodable: Codable, Equatable {
     let value: Any

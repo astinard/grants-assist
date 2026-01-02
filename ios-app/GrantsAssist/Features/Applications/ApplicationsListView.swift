@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ApplicationsListView: View {
+    @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = ApplicationsViewModel()
     @State private var selectedFilter: ApplicationStatus?
     @State private var showingApplication: Application?
@@ -15,6 +16,12 @@ struct ApplicationsListView: View {
                 }
             }
             .navigationTitle("Applications")
+            .onAppear {
+                if let application = appState.applicationToOpen {
+                    showingApplication = application
+                    appState.applicationToOpen = nil
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

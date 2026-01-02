@@ -10,27 +10,38 @@ struct ApplicationDetailView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Status Header
-                    statusHeader
+            Group {
+                if viewModel.isLoading {
+                    ProgressView("Loading application...")
+                } else {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // Status Header
+                            statusHeader
 
-                    // Progress Section
-                    progressSection
+                            // Progress Section
+                            progressSection
 
-                    Divider()
+                            Divider()
 
-                    // Form Fields
-                    formSection
+                            // Form Fields
+                            formSection
 
-                    // Actions
-                    if viewModel.application.status.isEditable {
-                        actionsSection
+                            // AI Narratives Section
+                            if viewModel.application.status.isEditable {
+                                narrativesSection
+                            }
+
+                            // Actions
+                            if viewModel.application.status.isEditable {
+                                actionsSection
+                            }
+
+                            Spacer(minLength: 100)
+                        }
+                        .padding()
                     }
-
-                    Spacer(minLength: 100)
                 }
-                .padding()
             }
             .navigationTitle("Application")
             .navigationBarTitleDisplayMode(.inline)
@@ -128,6 +139,65 @@ struct ApplicationDetailView: View {
             FormField(label: "Project Title", value: $viewModel.projectTitle, isRequired: true)
             FormField(label: "Project Description", value: $viewModel.projectDescription, isRequired: true, isMultiline: true)
             FormField(label: "Requested Amount", value: $viewModel.requestedAmount, isRequired: true)
+        }
+    }
+
+    // MARK: - Narratives
+
+    private var narrativesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("AI Writing Assistant")
+                    .font(.headline)
+                Spacer()
+            }
+
+            Text("Generate professional narratives for your grant application using AI.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Button {
+                Task { await viewModel.generateNarratives() }
+            } label: {
+                HStack {
+                    if viewModel.isGeneratingNarratives {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Generating...")
+                    } else {
+                        Image(systemName: "sparkles")
+                        Text("Generate Narratives")
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(Color.purple)
+                .foregroundStyle(.white)
+                .cornerRadius(12)
+            }
+            .disabled(viewModel.isGeneratingNarratives)
+
+            // Show generated narratives
+            if !viewModel.narratives.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(viewModel.narratives.keys.sorted()), id: \.self) { key in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(key.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+
+                            Text(viewModel.narratives[key] ?? "")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                    }
+                }
+            }
         }
     }
 
@@ -231,8 +301,11 @@ struct FormField: View {
 final class ApplicationDetailViewModel: ObservableObject {
     @Published var application: Application
     @Published var formData: [String: String] = [:]
+    @Published var narratives: [String: String] = [:]
+    @Published var isLoading = false
     @Published var isSaving = false
     @Published var isSubmitting = false
+    @Published var isGeneratingNarratives = false
     @Published var error: String?
 
     // Common form fields
@@ -250,18 +323,45 @@ final class ApplicationDetailViewModel: ObservableObject {
 
     init(application: Application) {
         self.application = application
-        loadFormData()
+        Task { await loadFormData() }
     }
 
-    private func loadFormData() {
-        // Initialize with empty form data (form data not included in list response)
-        originalFormData = formData
+    func loadFormData() async {
+        isLoading = true
 
-        // Initialize common fields
-        organizationName = ""
-        projectTitle = ""
-        projectDescription = ""
-        requestedAmount = ""
+        do {
+            let response: FormDataResponse = try await apiClient.request(
+                ApplicationEndpoint.formData(applicationId: application.id)
+            )
+
+            // Extract string values from form data
+            for (key, value) in response.formData {
+                if let stringValue = value.value as? String {
+                    formData[key] = stringValue
+                }
+            }
+
+            // Extract narratives if present
+            if let narrativesData = response.formData["narratives"]?.value as? [String: Any] {
+                for (key, value) in narrativesData {
+                    if let text = value as? String {
+                        narratives[key] = text
+                    }
+                }
+            }
+
+            // Populate common fields
+            organizationName = formData["organization_name"] ?? ""
+            projectTitle = formData["project_title"] ?? ""
+            projectDescription = formData["project_description"] ?? ""
+            requestedAmount = formData["requested_amount"] ?? ""
+
+            originalFormData = formData
+        } catch {
+            print("Failed to load form data: \(error)")
+        }
+
+        isLoading = false
     }
 
     func binding(for field: String) -> Binding<String> {
@@ -269,6 +369,31 @@ final class ApplicationDetailViewModel: ObservableObject {
             get: { self.formData[field] ?? "" },
             set: { self.formData[field] = $0 }
         )
+    }
+
+    func generateNarratives() async {
+        isGeneratingNarratives = true
+        error = nil
+
+        do {
+            let response: NarrativesResponse = try await apiClient.request(
+                ApplicationEndpoint.generateNarratives(
+                    applicationId: application.id,
+                    projectSummary: projectDescription.isEmpty ? nil : projectDescription
+                )
+            )
+
+            narratives = response.sections
+
+            // Reload form data to get updated narratives
+            await loadFormData()
+        } catch let apiError as APIError {
+            error = apiError.localizedDescription
+        } catch {
+            self.error = error.localizedDescription
+        }
+
+        isGeneratingNarratives = false
     }
 
     func save() async {

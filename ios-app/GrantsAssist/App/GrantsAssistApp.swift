@@ -73,6 +73,7 @@ final class AppState: ObservableObject {
     @Published var selectedTab: Tab = .discover
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var applicationToOpen: Application?
 
     enum Tab: Hashable {
         case discover
@@ -87,5 +88,10 @@ final class AppState: ObservableObject {
 
     func clearError() {
         errorMessage = nil
+    }
+
+    func navigateToApplication(_ application: Application) {
+        applicationToOpen = application
+        selectedTab = .applications
     }
 }

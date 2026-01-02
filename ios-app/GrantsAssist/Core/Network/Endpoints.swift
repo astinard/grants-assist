@@ -135,23 +135,29 @@ enum ApplicationEndpoint: APIEndpoint {
     case list(status: ApplicationStatus?)
     case create(programId: String)
     case detail(applicationId: String)
+    case formData(applicationId: String)
     case update(applicationId: String, request: ApplicationUpdateRequest)
     case delete(applicationId: String)
+    case generateNarratives(applicationId: String, projectSummary: String?)
+    case downloadPDF(applicationId: String)
 
     var path: String {
         switch self {
         case .list: return "/api/applications/"
         case .create: return "/api/applications/"
         case .detail(let id): return "/api/applications/\(id)"
+        case .formData(let id): return "/api/applications/\(id)/form-data"
         case .update(let id, _): return "/api/applications/\(id)"
         case .delete(let id): return "/api/applications/\(id)"
+        case .generateNarratives(let id, _): return "/api/applications/\(id)/generate-narratives"
+        case .downloadPDF(let id): return "/api/applications/\(id)/pdf"
         }
     }
 
     var method: HTTPMethod {
         switch self {
-        case .list, .detail: return .get
-        case .create: return .post
+        case .list, .detail, .formData, .downloadPDF: return .get
+        case .create, .generateNarratives: return .post
         case .update: return .patch
         case .delete: return .delete
         }
@@ -162,6 +168,9 @@ enum ApplicationEndpoint: APIEndpoint {
         case .list(let status):
             guard let status = status else { return nil }
             return [URLQueryItem(name: "status", value: status.rawValue)]
+        case .generateNarratives(_, let summary):
+            guard let summary = summary else { return nil }
+            return [URLQueryItem(name: "project_summary", value: summary)]
         default:
             return nil
         }

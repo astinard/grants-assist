@@ -2,11 +2,13 @@ import SwiftUI
 
 struct ProgramDetailView: View {
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var appState: AppState
     let program: GrantProgram
     let eligibility: EligibilityResult?
 
     @State private var isApplying = false
     @State private var showingApplicationCreated = false
+    @State private var createdApplication: Application?
 
     var body: some View {
         NavigationStack {
@@ -66,7 +68,9 @@ struct ProgramDetailView: View {
             .alert("Application Created", isPresented: $showingApplicationCreated) {
                 Button("View Application") {
                     dismiss()
-                    // TODO: Navigate to application
+                    if let application = createdApplication {
+                        appState.navigateToApplication(application)
+                    }
                 }
                 Button("Continue Browsing", role: .cancel) {
                     dismiss()
@@ -351,9 +355,10 @@ struct ProgramDetailView: View {
 
         Task {
             do {
-                let _: Application = try await APIClient.shared.request(
+                let application: Application = try await APIClient.shared.request(
                     ApplicationEndpoint.create(programId: program.id)
                 )
+                createdApplication = application
                 showingApplicationCreated = true
             } catch {
                 print("Failed to create application: \(error)")
