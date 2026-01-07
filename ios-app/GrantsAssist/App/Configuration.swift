@@ -4,7 +4,7 @@ enum Configuration {
     // MARK: - API Configuration
 
     #if DEBUG
-    static let apiBaseURL = URL(string: "http://localhost:8000")!
+    static let apiBaseURL = URL(string: "http://localhost:8006")!
     #else
     static let apiBaseURL = URL(string: "https://api-production-ce3d4.up.railway.app")!
     #endif

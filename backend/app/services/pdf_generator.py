@@ -32,12 +32,12 @@ def format_currency(amount: float) -> str:
     return f"${amount:,.0f}"
 
 
-def generate_grant_summary_pdf(program: GrantProgram) -> bytes:
+def generate_grant_summary_pdf(program: Dict[str, Any]) -> bytes:
     """
     Generate a summary PDF for a grant program.
 
     Args:
-        program: GrantProgram model instance
+        program: Dict with program data
 
     Returns:
         PDF bytes
@@ -80,7 +80,7 @@ def generate_grant_summary_pdf(program: GrantProgram) -> bytes:
         backColor=colors.HexColor('#f0fdfa')
     ))
     styles.add(ParagraphStyle(
-        name='BodyText',
+        name='GrantBody',
         parent=styles['Normal'],
         fontSize=10,
         leading=14
@@ -95,8 +95,8 @@ def generate_grant_summary_pdf(program: GrantProgram) -> bytes:
     story = []
 
     # Header
-    story.append(Paragraph(program.name, styles['GrantTitle']))
-    story.append(Paragraph(f"Agency: {program.agency or 'N/A'}", styles['GrantSubtitle']))
+    story.append(Paragraph(program.get('name', 'Grant Program'), styles['GrantTitle']))
+    story.append(Paragraph(f"Agency: {program.get('agency') or 'N/A'}", styles['GrantSubtitle']))
     story.append(Paragraph(
         f"Generated: {datetime.now().strftime('%B %d, %Y')}",
         styles['SmallText']
@@ -107,19 +107,25 @@ def generate_grant_summary_pdf(program: GrantProgram) -> bytes:
     story.append(Paragraph("Quick Facts", styles['SectionHeader']))
 
     funding_range = "N/A"
-    if program.min_award and program.max_award:
-        funding_range = f"{format_currency(program.min_award)} - {format_currency(program.max_award)}"
-    elif program.max_award:
-        funding_range = f"Up to {format_currency(program.max_award)}"
+    min_award = program.get('min_award')
+    max_award = program.get('max_award')
+    if min_award and max_award:
+        funding_range = f"{format_currency(min_award)} - {format_currency(max_award)}"
+    elif max_award:
+        funding_range = f"Up to {format_currency(max_award)}"
 
-    deadline_str = "Rolling / Open" if program.rolling_deadline else (
-        program.deadline.strftime('%B %d, %Y') if program.deadline else "TBD"
-    )
+    rolling_deadline = program.get('rolling_deadline')
+    deadline = program.get('deadline')
+    deadline_str = "Rolling / Open" if rolling_deadline else (deadline if deadline else "TBD")
 
-    match_str = f"{int(program.match_required * 100)}%" if program.match_required else "None required"
+    match_required = program.get('match_required')
+    match_str = f"{int(match_required * 100)}%" if match_required else "None required"
+
+    category = program.get('category')
+    category_str = category.replace('_', ' ').title() if category else "N/A"
 
     facts_data = [
-        ["Category:", program.category.value.replace('_', ' ').title() if program.category else "N/A"],
+        ["Category:", category_str],
         ["Funding Range:", funding_range],
         ["Match Required:", match_str],
         ["Deadline:", deadline_str],
@@ -138,24 +144,28 @@ def generate_grant_summary_pdf(program: GrantProgram) -> bytes:
     story.append(Spacer(1, 12))
 
     # Description
-    if program.description:
+    description = program.get('description')
+    if description:
         story.append(Paragraph("Program Overview", styles['SectionHeader']))
-        story.append(Paragraph(program.description, styles['BodyText']))
+        story.append(Paragraph(description, styles['GrantBody']))
         story.append(Spacer(1, 8))
 
     # Eligibility
-    if program.eligibility_summary:
+    eligibility_summary = program.get('eligibility_summary')
+    if eligibility_summary:
         story.append(Paragraph("Eligibility Requirements", styles['SectionHeader']))
-        story.append(Paragraph(program.eligibility_summary, styles['BodyText']))
+        story.append(Paragraph(eligibility_summary, styles['GrantBody']))
         story.append(Spacer(1, 8))
 
     # Links
-    if program.program_url or program.application_url:
+    program_url = program.get('program_url')
+    application_url = program.get('application_url')
+    if program_url or application_url:
         story.append(Paragraph("Resources", styles['SectionHeader']))
-        if program.program_url:
-            story.append(Paragraph(f"Program Info: {program.program_url}", styles['SmallText']))
-        if program.application_url:
-            story.append(Paragraph(f"Apply: {program.application_url}", styles['SmallText']))
+        if program_url:
+            story.append(Paragraph(f"Program Info: {program_url}", styles['SmallText']))
+        if application_url:
+            story.append(Paragraph(f"Apply: {application_url}", styles['SmallText']))
 
     # Footer
     story.append(Spacer(1, 20))
@@ -172,18 +182,18 @@ def generate_grant_summary_pdf(program: GrantProgram) -> bytes:
 
 
 def generate_application_pdf(
-    application: Application,
-    profile: Optional[UserProfile] = None,
-    program: Optional[GrantProgram] = None,
+    application: Dict[str, Any],
+    program: Optional[Dict[str, Any]] = None,
+    profile: Optional[Dict[str, Any]] = None,
     narratives: Optional[Dict[str, str]] = None
 ) -> bytes:
     """
     Generate a draft application PDF.
 
     Args:
-        application: Application model instance
-        profile: User's profile data
-        program: Grant program details
+        application: Dict with application data
+        program: Dict with grant program details
+        profile: Dict with user's profile data
         narratives: Generated narrative sections
 
     Returns:
@@ -240,16 +250,18 @@ def generate_application_pdf(
     story = []
 
     # Cover Page
-    program_name = program.name if program else "Grant Application"
+    program_name = program.get('name') if program else "Grant Application"
     story.append(Paragraph(f"Draft Application", styles['AppTitle']))
     story.append(Paragraph(program_name, styles['AppSubtitle']))
     story.append(Spacer(1, 8))
 
     # Status badge
-    status_text = f"Status: {application.status.value.replace('_', ' ').title()}"
+    app_status = application.get('status', 'draft')
+    status_text = f"Status: {app_status.replace('_', ' ').title()}"
     story.append(Paragraph(status_text, styles['AppLabel']))
+    updated_at = application.get('updated_at', 'N/A')
     story.append(Paragraph(
-        f"Last Updated: {application.updated_at.strftime('%B %d, %Y') if application.updated_at else 'N/A'}",
+        f"Last Updated: {updated_at}",
         styles['AppLabel']
     ))
     story.append(Spacer(1, 16))
@@ -259,19 +271,15 @@ def generate_application_pdf(
         story.append(Paragraph("Applicant Information", styles['AppSection']))
 
         applicant_data = []
-        if profile.full_name:
-            applicant_data.append(["Name:", profile.full_name])
-        if profile.organization_name:
-            applicant_data.append(["Organization:", profile.organization_name])
-        if profile.organization_type:
-            applicant_data.append(["Org Type:", profile.organization_type.replace('_', ' ').title()])
-        if profile.address:
-            address = f"{profile.address}, {profile.city}, {profile.state} {profile.zip_code}"
-            applicant_data.append(["Address:", address])
-        if profile.ein:
-            applicant_data.append(["EIN:", profile.ein])
-        if profile.uei_number:
-            applicant_data.append(["UEI:", profile.uei_number])
+        if profile.get('full_name'):
+            applicant_data.append(["Name:", profile.get('full_name')])
+        if profile.get('organization_name'):
+            applicant_data.append(["Organization:", profile.get('organization_name')])
+        if profile.get('organization_type'):
+            applicant_data.append(["Org Type:", profile.get('organization_type', '').replace('_', ' ').title()])
+        if profile.get('city') and profile.get('state'):
+            address = f"{profile.get('city')}, {profile.get('state')}"
+            applicant_data.append(["Location:", address])
 
         if applicant_data:
             app_table = Table(applicant_data, colWidths=[1.3*inch, 5*inch])
@@ -284,28 +292,27 @@ def generate_application_pdf(
             story.append(app_table)
         story.append(Spacer(1, 8))
 
-    # Narrative Sections
-    if narratives:
+    # Narrative Sections from form_data
+    form_data = application.get('form_data', {})
+    if form_data.get('narratives'):
+        narratives = form_data.get('narratives', {})
         for section_name, content in narratives.items():
             if content:
-                # Convert section key to title
                 title = section_name.replace('_', ' ').title()
                 story.append(Paragraph(title, styles['AppSection']))
                 story.append(Paragraph(content, styles['AppBody']))
 
-    # If we have generated narrative from the application
-    if application.generated_narrative and not narratives:
-        story.append(Paragraph("Project Narrative", styles['AppSection']))
-        story.append(Paragraph(application.generated_narrative, styles['AppBody']))
-
     # Completeness
     story.append(Spacer(1, 16))
     story.append(Paragraph("Application Status", styles['AppSection']))
-    completeness = application.completeness_score or 0
-    story.append(Paragraph(
-        f"Completeness: {completeness:.0f}%",
-        styles['AppBody']
-    ))
+    completeness = application.get('completeness_score') or 0
+    if isinstance(completeness, (int, float)):
+        story.append(Paragraph(
+            f"Completeness: {completeness:.0f}%",
+            styles['AppBody']
+        ))
+    else:
+        story.append(Paragraph("Completeness: 0%", styles['AppBody']))
 
     # Footer
     story.append(Spacer(1, 20))
