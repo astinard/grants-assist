@@ -453,7 +453,34 @@ class ApplicationSection(Base):
 
 # ============ Database Setup ============
 
-engine = create_engine(settings.database_url, echo=settings.debug)
+def get_database_url():
+    """Get database URL, converting Railway's postgres:// to postgresql://."""
+    url = settings.database_url
+    # Railway uses postgres:// but SQLAlchemy 2.0+ requires postgresql://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
+# Configure engine based on database type
+database_url = get_database_url()
+
+if database_url.startswith("postgresql://"):
+    # PostgreSQL configuration with connection pooling
+    engine = create_engine(
+        database_url,
+        echo=settings.debug,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,  # Verify connections before using
+    )
+else:
+    # SQLite configuration (local development)
+    engine = create_engine(
+        database_url,
+        echo=settings.debug,
+        connect_args={"check_same_thread": False}  # SQLite specific
+    )
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
