@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, users, programs, applications, eligibility, notifications
+from app.api import auth, users, programs, applications, eligibility, notifications, organization
 from app.config.settings import settings
 from app.models.database import init_db
 from app.services.scheduler import start_scheduler, shutdown_scheduler
@@ -45,6 +45,7 @@ app.include_router(programs.router)
 app.include_router(applications.router)
 app.include_router(eligibility.router)
 app.include_router(notifications.router)
+app.include_router(organization.router)
 
 
 @app.get("/health")

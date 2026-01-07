@@ -8,10 +8,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 import io
 
-from app.models.database import get_db, User, Application, GrantProgram, ApplicationStatus, UserProfile
+from app.models.database import (
+    get_db, User, Application, GrantProgram, ApplicationStatus,
+    UserProfile, ApplicationSection, SectionType, BudgetLineItem, BudgetCategory
+)
 from app.api.auth import get_current_user
 from app.services.ai_writing import ai_writing_service
 from app.services.pdf_generator import generate_application_pdf, generate_grant_summary_pdf
+from app.services.ai_writing_v2 import create_professional_writing_service
+from app.services.quality_scorer import create_quality_scorer
+from app.services.pdf_generator_v2 import create_professional_pdf_generator
 
 router = APIRouter(prefix="/api/applications", tags=["Applications"])
 
@@ -288,6 +294,497 @@ async def download_application_pdf(
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+
+# ============ Budget Endpoints ============
+
+class BudgetLineItemCreate(BaseModel):
+    category: str
+    description: str
+    unit_cost: float
+    quantity: float = 1
+    justification: Optional[str] = None
+    is_matching: bool = False
+
+
+class BudgetLineItemResponse(BaseModel):
+    id: str
+    category: str
+    description: str
+    unit_cost: float
+    quantity: float
+    total_cost: float
+    justification: Optional[str]
+    is_matching: bool
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/{app_id}/budget")
+async def get_application_budget(
+    app_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get budget line items for an application."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    items = db.query(BudgetLineItem).filter(
+        BudgetLineItem.application_id == app_id
+    ).order_by(BudgetLineItem.category, BudgetLineItem.sort_order).all()
+
+    total_request = 0
+    total_match = 0
+
+    line_items = []
+    for item in items:
+        total = (item.unit_cost or 0) * (item.quantity or 1)
+        if item.is_matching:
+            total_match += total
+        else:
+            total_request += total
+
+        line_items.append({
+            "id": item.id,
+            "category": item.category.value if item.category else "other",
+            "description": item.description,
+            "unit_cost": item.unit_cost,
+            "quantity": item.quantity,
+            "total_cost": total,
+            "justification": item.justification,
+            "is_matching": item.is_matching
+        })
+
+    return {
+        "application_id": app_id,
+        "line_items": line_items,
+        "total_request": total_request,
+        "total_match": total_match,
+        "grand_total": total_request + total_match
+    }
+
+
+@router.post("/{app_id}/budget")
+async def add_budget_line_item(
+    app_id: str,
+    data: BudgetLineItemCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Add a budget line item."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    try:
+        category = BudgetCategory(data.category)
+    except ValueError:
+        category = BudgetCategory.OTHER
+
+    # Get current max sort order
+    max_order = db.query(BudgetLineItem).filter(
+        BudgetLineItem.application_id == app_id
+    ).count()
+
+    item = BudgetLineItem(
+        application_id=app_id,
+        category=category,
+        description=data.description,
+        unit_cost=data.unit_cost,
+        quantity=data.quantity,
+        total_cost=data.unit_cost * data.quantity,
+        justification=data.justification,
+        is_matching=data.is_matching,
+        sort_order=max_order
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+
+    return {
+        "id": item.id,
+        "category": item.category.value,
+        "description": item.description,
+        "unit_cost": item.unit_cost,
+        "quantity": item.quantity,
+        "total_cost": item.total_cost,
+        "justification": item.justification,
+        "is_matching": item.is_matching
+    }
+
+
+@router.delete("/{app_id}/budget/{item_id}")
+async def delete_budget_line_item(
+    app_id: str,
+    item_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a budget line item."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    item = db.query(BudgetLineItem).filter(
+        BudgetLineItem.id == item_id,
+        BudgetLineItem.application_id == app_id
+    ).first()
+
+    if not item:
+        raise HTTPException(status_code=404, detail="Budget item not found")
+
+    db.delete(item)
+    db.commit()
+
+    return {"message": "Budget item deleted"}
+
+
+# ============ Professional Generation Endpoints ============
+
+@router.post("/{app_id}/generate-professional")
+async def generate_professional_application(
+    app_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a complete professional grant application using AI.
+
+    This uses multi-phase generation to create consulting-firm quality
+    narratives for all 10 standard grant sections.
+    """
+    app = db.query(Application).options(
+        joinedload(Application.program)
+    ).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Create professional writing service
+    writing_service = create_professional_writing_service(db)
+
+    # Generate all sections
+    result = await writing_service.generate_professional_application(
+        user_id=current_user.id,
+        application_id=app_id,
+        program_id=app.program_id
+    )
+
+    # Update application status
+    if app.status == ApplicationStatus.DRAFT:
+        app.status = ApplicationStatus.IN_PROGRESS
+        db.commit()
+
+    return {
+        "message": "Professional application generated",
+        "application_id": app_id,
+        "sections_generated": len(result.get("sections", {})),
+        "sections": {
+            k: {
+                "title": v.get("title", k),
+                "word_count": v.get("word_count", 0),
+                "order": v.get("order", 99)
+            }
+            for k, v in result.get("sections", {}).items()
+        }
+    }
+
+
+@router.get("/{app_id}/sections")
+async def get_application_sections(
+    app_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all generated sections for an application."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    sections = db.query(ApplicationSection).filter(
+        ApplicationSection.application_id == app_id
+    ).order_by(ApplicationSection.section_type).all()
+
+    return {
+        "application_id": app_id,
+        "sections": [
+            {
+                "id": s.id,
+                "section_type": s.section_type.value,
+                "title": s.section_type.value.replace("_", " ").title(),
+                "content": s.content,
+                "word_count": s.word_count,
+                "quality_score": s.quality_score,
+                "relevance_score": s.relevance_score,
+                "evidence_score": s.evidence_score,
+                "ai_feedback": s.ai_feedback,
+                "version": s.version,
+                "is_final": s.is_final,
+                "is_user_edited": s.is_user_edited,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None
+            }
+            for s in sections
+        ],
+        "total_sections": len(sections),
+        "total_words": sum(s.word_count or 0 for s in sections)
+    }
+
+
+@router.get("/{app_id}/sections/{section_type}")
+async def get_section(
+    app_id: str,
+    section_type: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific section."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    try:
+        st = SectionType(section_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid section type: {section_type}")
+
+    section = db.query(ApplicationSection).filter(
+        ApplicationSection.application_id == app_id,
+        ApplicationSection.section_type == st
+    ).first()
+
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+
+    return {
+        "id": section.id,
+        "section_type": section.section_type.value,
+        "title": section.section_type.value.replace("_", " ").title(),
+        "content": section.content,
+        "word_count": section.word_count,
+        "quality_score": section.quality_score,
+        "relevance_score": section.relevance_score,
+        "evidence_score": section.evidence_score,
+        "ai_feedback": section.ai_feedback,
+        "version": section.version,
+        "is_final": section.is_final,
+        "is_user_edited": section.is_user_edited
+    }
+
+
+class SectionUpdateRequest(BaseModel):
+    content: str
+
+
+@router.put("/{app_id}/sections/{section_type}")
+async def update_section(
+    app_id: str,
+    section_type: str,
+    data: SectionUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a section's content (user edit)."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    try:
+        st = SectionType(section_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid section type: {section_type}")
+
+    section = db.query(ApplicationSection).filter(
+        ApplicationSection.application_id == app_id,
+        ApplicationSection.section_type == st
+    ).first()
+
+    if not section:
+        # Create new section
+        section = ApplicationSection(
+            application_id=app_id,
+            section_type=st
+        )
+        db.add(section)
+
+    section.content = data.content
+    section.word_count = len(data.content.split())
+    section.is_user_edited = True
+    section.version += 1
+
+    db.commit()
+    db.refresh(section)
+
+    return {
+        "id": section.id,
+        "section_type": section.section_type.value,
+        "content": section.content,
+        "word_count": section.word_count,
+        "version": section.version,
+        "is_user_edited": section.is_user_edited
+    }
+
+
+@router.post("/{app_id}/sections/{section_type}/regenerate")
+async def regenerate_section(
+    app_id: str,
+    section_type: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Regenerate a specific section."""
+    app = db.query(Application).options(
+        joinedload(Application.program)
+    ).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    try:
+        st = SectionType(section_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid section type: {section_type}")
+
+    writing_service = create_professional_writing_service(db)
+
+    result = await writing_service.generate_professional_application(
+        user_id=current_user.id,
+        application_id=app_id,
+        program_id=app.program_id,
+        sections_to_generate=[st]
+    )
+
+    section_data = result.get("sections", {}).get(st.value, {})
+
+    return {
+        "message": f"Section {section_type} regenerated",
+        "section_type": section_type,
+        "word_count": section_data.get("word_count", 0),
+        "content": section_data.get("content", "")
+    }
+
+
+@router.get("/{app_id}/quality-score")
+async def get_quality_score(
+    app_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get quality scores for the application."""
+    app = db.query(Application).options(
+        joinedload(Application.program)
+    ).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Create quality scorer
+    scorer = create_quality_scorer(db)
+
+    # Get program context for relevance scoring
+    program_context = None
+    if app.program:
+        program_context = {
+            "name": app.program.name,
+            "agency": app.program.agency,
+            "category": app.program.category.value if app.program.category else None
+        }
+
+    # Score the application
+    score_result = await scorer.score_application(app_id, program_context)
+
+    # Update application completeness score
+    app.completeness_score = score_result.overall_score
+    db.commit()
+
+    return {
+        "application_id": app_id,
+        "overall_score": score_result.overall_score,
+        "ready_for_submission": score_result.ready_for_submission,
+        "strengths": score_result.strengths,
+        "critical_improvements": score_result.critical_improvements,
+        "section_scores": {
+            k: {
+                "overall": v.overall_score,
+                "relevance": v.relevance_score,
+                "evidence": v.evidence_score,
+                "writing": v.writing_score,
+                "completeness": v.completeness_score,
+                "feedback": v.feedback,
+                "strengths": v.strengths,
+                "improvements": v.improvements
+            }
+            for k, v in score_result.section_scores.items()
+        }
+    }
+
+
+@router.get("/{app_id}/professional-pdf")
+async def download_professional_pdf(
+    app_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Download the professional application PDF."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Create professional PDF generator
+    pdf_generator = create_professional_pdf_generator(db)
+
+    try:
+        pdf_bytes = pdf_generator.generate_professional_application_pdf(app_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+    filename = f"application_{app_id[:8]}_professional.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+# ============ Delete Endpoint ============
 
 @router.delete("/{app_id}")
 async def delete_application(

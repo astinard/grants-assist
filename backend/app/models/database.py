@@ -44,6 +44,51 @@ class SubscriptionTier(str, Enum):
     BUSINESS = "business"   # $29.99/mo - team features, priority
 
 
+class SectionType(str, Enum):
+    """Types of professional grant sections."""
+    COVER_LETTER = "cover_letter"
+    EXECUTIVE_SUMMARY = "executive_summary"
+    ORGANIZATIONAL_BACKGROUND = "organizational_background"
+    STATEMENT_OF_NEED = "statement_of_need"
+    PROJECT_DESCRIPTION = "project_description"
+    GOALS_OBJECTIVES = "goals_objectives"
+    EVALUATION_PLAN = "evaluation_plan"
+    BUDGET_NARRATIVE = "budget_narrative"
+    SUSTAINABILITY_PLAN = "sustainability_plan"
+    CONCLUSION = "conclusion"
+
+
+class PriorGrantStatus(str, Enum):
+    """Status of prior grants."""
+    AWARDED = "awarded"
+    PENDING = "pending"
+    DENIED = "denied"
+
+
+class CommunityDataType(str, Enum):
+    """Types of community data for statement of need."""
+    DEMOGRAPHIC = "demographic"
+    ECONOMIC = "economic"
+    HEALTH = "health"
+    EDUCATION = "education"
+    INFRASTRUCTURE = "infrastructure"
+    EMPLOYMENT = "employment"
+    OTHER = "other"
+
+
+class BudgetCategory(str, Enum):
+    """Budget line item categories."""
+    PERSONNEL = "personnel"
+    FRINGE_BENEFITS = "fringe_benefits"
+    TRAVEL = "travel"
+    EQUIPMENT = "equipment"
+    SUPPLIES = "supplies"
+    CONTRACTUAL = "contractual"
+    CONSTRUCTION = "construction"
+    OTHER = "other"
+    INDIRECT_COSTS = "indirect_costs"
+
+
 # ============ Models ============
 
 class User(Base):
@@ -213,6 +258,197 @@ class NotificationPreference(Base):
 
     # Relationships
     user = relationship("User", backref="notification_preferences")
+
+
+# ============ Professional Grant Writing Models ============
+
+class OrganizationProfile(Base):
+    """Extended organization profile for professional grant writing."""
+    __tablename__ = "organization_profiles"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, unique=True)
+
+    # Mission & History
+    mission_statement = Column(Text)
+    vision_statement = Column(Text)
+    founding_year = Column(Integer)
+    service_area = Column(Text)  # Geographic area served
+    service_area_population = Column(Integer)
+
+    # Organizational Capacity
+    annual_budget = Column(Float)
+    staff_count = Column(Integer)
+    volunteer_count = Column(Integer)
+    board_size = Column(Integer)
+
+    # Credentials
+    certifications = Column(Text)  # JSON list
+    accreditations = Column(Text)  # JSON list
+    key_partnerships = Column(Text)  # JSON list of partner organizations
+
+    # Impact Metrics
+    clients_served_annually = Column(Integer)
+    geographic_reach = Column(String(255))  # e.g., "5 counties in rural Kentucky"
+    programs_offered = Column(Text)  # JSON list of program names
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="organization_profile")
+
+
+class PriorGrant(Base):
+    """Track prior grants for organizational credibility."""
+    __tablename__ = "prior_grants"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+
+    # Grant Details
+    funder_name = Column(String(255), nullable=False)
+    grant_title = Column(String(255))
+    amount = Column(Float)
+    year_awarded = Column(Integer)
+    status = Column(SQLEnum(PriorGrantStatus), default=PriorGrantStatus.AWARDED)
+
+    # Outcomes
+    outcomes_achieved = Column(Text)  # Description of what was accomplished
+    metrics_achieved = Column(Text)  # JSON: {"people_served": 500, "jobs_created": 25}
+    lessons_learned = Column(Text)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="prior_grants")
+
+
+class Achievement(Base):
+    """Quantifiable organizational achievements."""
+    __tablename__ = "achievements"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+
+    # Achievement Details
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    category = Column(String(100))  # e.g., "impact", "award", "milestone", "growth"
+
+    # Metrics
+    metric_value = Column(Float)
+    metric_unit = Column(String(50))  # e.g., "people", "dollars", "percent"
+    year = Column(Integer)
+
+    # Evidence
+    evidence_url = Column(String(500))
+    source = Column(String(255))
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="achievements")
+
+
+class CommunityData(Base):
+    """Community statistics for statement of need."""
+    __tablename__ = "community_data"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+
+    # Data Classification
+    data_type = Column(SQLEnum(CommunityDataType), nullable=False)
+    indicator = Column(String(255), nullable=False)  # e.g., "Poverty Rate", "Unemployment"
+
+    # Values
+    statistic = Column(String(255), nullable=False)  # e.g., "23.5%", "45,000"
+    comparison_value = Column(String(255))  # e.g., "National average: 11.4%"
+    trend = Column(String(100))  # e.g., "increasing", "stable", "declining"
+
+    # Source
+    source = Column(String(255), nullable=False)  # e.g., "US Census Bureau"
+    source_year = Column(Integer)
+    source_url = Column(String(500))
+
+    # Geography
+    geographic_area = Column(String(255))  # e.g., "Harlan County, KY"
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="community_data")
+
+
+class BudgetLineItem(Base):
+    """Individual budget line items for applications."""
+    __tablename__ = "budget_line_items"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    application_id = Column(String(36), ForeignKey("applications.id"), nullable=False)
+
+    # Category & Description
+    category = Column(SQLEnum(BudgetCategory), nullable=False)
+    description = Column(String(500), nullable=False)
+
+    # Costs
+    unit_cost = Column(Float, nullable=False)
+    quantity = Column(Float, default=1)
+    total_cost = Column(Float)  # Calculated: unit_cost * quantity
+
+    # Justification
+    justification = Column(Text)  # Why this expense is necessary
+    is_matching = Column(Boolean, default=False)  # True if this is match/cost-share
+
+    # Order for display
+    sort_order = Column(Integer, default=0)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    application = relationship("Application", backref="budget_line_items")
+
+
+class ApplicationSection(Base):
+    """Individual sections of a professional grant application."""
+    __tablename__ = "application_sections"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    application_id = Column(String(36), ForeignKey("applications.id"), nullable=False)
+
+    # Section Info
+    section_type = Column(SQLEnum(SectionType), nullable=False)
+    content = Column(Text)
+    word_count = Column(Integer, default=0)
+
+    # Quality Tracking
+    quality_score = Column(Float)  # 0-100
+    ai_feedback = Column(Text)  # Suggestions for improvement
+    relevance_score = Column(Float)  # How relevant to funder priorities
+    evidence_score = Column(Float)  # Use of data and evidence
+
+    # Versioning
+    version = Column(Integer, default=1)
+    is_final = Column(Boolean, default=False)
+    is_user_edited = Column(Boolean, default=False)
+
+    # Generation metadata
+    generation_prompt = Column(Text)  # Store the prompt used
+    generation_model = Column(String(100))  # e.g., "gemini-2.0-flash"
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    application = relationship("Application", backref="sections")
 
 
 # ============ Database Setup ============
