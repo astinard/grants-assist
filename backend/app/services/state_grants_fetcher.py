@@ -278,7 +278,9 @@ class CaliforniaGrantsFetcher:
 
     def _upsert_grant(self, grant: Dict) -> None:
         """Insert or update a grant in the database."""
-        grant_id = f"ca_state_{grant.get('GrantID', grant.get('_id', 'unknown'))}"
+        # Use GrantID if available, otherwise fall back to PortalID or _id
+        raw_id = grant.get('GrantID') or grant.get('PortalID') or grant.get('_id') or 'unknown'
+        grant_id = f"ca_state_{raw_id}"
 
         existing = self.db.query(GrantProgram).filter(
             GrantProgram.id == grant_id
