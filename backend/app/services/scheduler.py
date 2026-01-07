@@ -26,6 +26,29 @@ async def check_deadline_reminders():
         db.close()
 
 
+def sync_grants_gov_job():
+    """Job to sync grants from Grants.gov daily."""
+    print(f"[{datetime.utcnow()}] Running Grants.gov sync...")
+
+    db = SessionLocal()
+    try:
+        from app.services.grants_gov_fetcher import sync_grants_gov, create_grants_gov_fetcher
+
+        # Sync all open grants
+        stats = sync_grants_gov(db)
+        print(f"[{datetime.utcnow()}] Grants.gov sync completed: {stats['imported']} imported, {stats['updated']} updated")
+
+        # Mark expired grants as inactive
+        fetcher = create_grants_gov_fetcher(db)
+        expired = fetcher.mark_expired_inactive()
+        print(f"[{datetime.utcnow()}] Marked {expired} expired grants as inactive")
+
+    except Exception as e:
+        print(f"[{datetime.utcnow()}] Error in Grants.gov sync: {e}")
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """Initialize and start the background scheduler."""
     # Check for deadline reminders every day at 9 AM UTC
@@ -34,6 +57,16 @@ def start_scheduler():
         CronTrigger(hour=9, minute=0),
         id="deadline_reminders",
         name="Check and send deadline reminders",
+        replace_existing=True
+    )
+
+    # Sync grants from Grants.gov every day at 5 AM UTC
+    # This runs before deadline reminders to ensure fresh data
+    scheduler.add_job(
+        sync_grants_gov_job,
+        CronTrigger(hour=5, minute=0),
+        id="grants_gov_sync",
+        name="Sync grants from Grants.gov",
         replace_existing=True
     )
 

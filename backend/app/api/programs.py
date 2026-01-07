@@ -1,15 +1,20 @@
 """Grant programs API."""
 from typing import List, Optional
 import io
-from fastapi import APIRouter, Depends, HTTPException
+import os
+from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.models.database import get_db, GrantProgram, GrantCategory
 from app.services.pdf_generator import generate_grant_summary_pdf
 
 router = APIRouter(prefix="/api/programs", tags=["Grant Programs"])
+
+# Admin key for sync endpoint (set via environment variable)
+ADMIN_KEY = os.getenv("ADMIN_KEY", "grants-admin-key-change-me")
 
 
 # ============ Schemas ============
@@ -90,6 +95,51 @@ async def list_categories():
             {"id": c.value, "name": c.value.replace("_", " ").title()}
             for c in GrantCategory
         ]
+    }
+
+
+@router.get("/stats")
+async def get_program_stats(db: Session = Depends(get_db)):
+    """Get statistics about available programs."""
+    total = db.query(GrantProgram).count()
+    active = db.query(GrantProgram).filter(GrantProgram.is_active == True).count()
+    from_grants_gov = db.query(GrantProgram).filter(
+        GrantProgram.id.like("grants_gov_%")
+    ).count()
+    active_grants_gov = db.query(GrantProgram).filter(
+        GrantProgram.id.like("grants_gov_%"),
+        GrantProgram.is_active == True
+    ).count()
+
+    # Category breakdown
+    category_counts = {}
+    for cat in GrantCategory:
+        count = db.query(GrantProgram).filter(
+            GrantProgram.category == cat,
+            GrantProgram.is_active == True
+        ).count()
+        if count > 0:
+            category_counts[cat.value] = count
+
+    # Agency breakdown (top 10)
+    agency_query = db.query(
+        GrantProgram.agency,
+        func.count(GrantProgram.id).label("count")
+    ).filter(
+        GrantProgram.is_active == True,
+        GrantProgram.agency.isnot(None)
+    ).group_by(GrantProgram.agency).order_by(func.count(GrantProgram.id).desc()).limit(10).all()
+
+    top_agencies = {a[0]: a[1] for a in agency_query if a[0]}
+
+    return {
+        "total_programs": total,
+        "active_programs": active,
+        "from_grants_gov": from_grants_gov,
+        "active_grants_gov": active_grants_gov,
+        "seeded_programs": total - from_grants_gov,
+        "by_category": category_counts,
+        "top_agencies": top_agencies,
     }
 
 
@@ -285,3 +335,74 @@ async def seed_programs(db: Session = Depends(get_db)):
 
     db.commit()
     return {"message": f"Successfully seeded {added} grant programs", "seeded": added}
+
+
+# ============ Grants.gov Sync Endpoints ============
+
+@router.post("/sync-grants-gov")
+async def sync_grants_gov(
+    background_tasks: BackgroundTasks,
+    x_admin_key: str = Header(None),
+    categories: Optional[str] = None,  # Comma-separated: "AG,ED,HL"
+    min_award: Optional[float] = None,
+    max_results: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Sync grant programs from Grants.gov.
+
+    This endpoint triggers a sync from the Grants.gov daily XML extract.
+    Requires admin key for authentication.
+
+    Args:
+        x_admin_key: Admin authentication key (header)
+        categories: Comma-separated category codes to filter (e.g., "AG,ED,HL")
+        min_award: Minimum award ceiling to include
+        max_results: Maximum number of grants to import (for testing)
+    """
+    # Verify admin key
+    if x_admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+
+    from app.services.grants_gov_fetcher import sync_grants_gov as do_sync
+
+    # Parse categories
+    cat_list = None
+    if categories:
+        cat_list = [c.strip().upper() for c in categories.split(",")]
+
+    try:
+        stats = do_sync(
+            db=db,
+            categories=cat_list,
+            min_award=min_award,
+            max_results=max_results
+        )
+        return {
+            "success": True,
+            "message": f"Sync complete: {stats['imported']} imported, {stats['updated']} updated",
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+@router.post("/mark-expired")
+async def mark_expired_grants(
+    x_admin_key: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Mark grants with past deadlines as inactive."""
+    if x_admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+
+    from app.services.grants_gov_fetcher import create_grants_gov_fetcher
+
+    fetcher = create_grants_gov_fetcher(db)
+    count = fetcher.mark_expired_inactive()
+
+    return {
+        "success": True,
+        "message": f"Marked {count} grants as inactive",
+        "expired_count": count
+    }
