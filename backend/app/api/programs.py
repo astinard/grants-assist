@@ -475,3 +475,92 @@ async def mark_expired_grants(
         "message": f"Marked {count} grants as inactive",
         "expired_count": count
     }
+
+
+# ============ State Grants Sync Endpoints ============
+
+@router.post("/sync-state-grants")
+async def sync_state_grants(
+    x_admin_key: str = Header(None),
+    state: Optional[str] = "CA",  # Currently only CA supported
+    categories: Optional[str] = None,
+    min_award: Optional[float] = None,
+    max_results: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Sync grant programs from state portals.
+
+    Currently supported states:
+    - CA: California Grants Portal (data.ca.gov) - FREE
+
+    Args:
+        x_admin_key: Admin authentication key (header)
+        state: State code (default: CA)
+        categories: Comma-separated category keywords to filter
+        min_award: Minimum award amount
+        max_results: Maximum grants to import (for testing)
+    """
+    if x_admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+
+    state = state.upper() if state else "CA"
+
+    if state == "CA":
+        from app.services.state_grants_fetcher import sync_california_grants
+
+        cat_list = None
+        if categories:
+            cat_list = [c.strip() for c in categories.split(",")]
+
+        try:
+            stats = sync_california_grants(
+                db=db,
+                categories=cat_list,
+                min_award=min_award,
+                max_results=max_results
+            )
+            return {
+                "success": True,
+                "state": "CA",
+                "message": f"California sync complete: {stats['imported']} imported, {stats['updated']} updated",
+                "stats": stats
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"California sync failed: {str(e)}")
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"State '{state}' not yet supported. Currently available: CA"
+        )
+
+
+@router.get("/state-stats")
+async def get_state_grant_stats(db: Session = Depends(get_db)):
+    """Get statistics about state-level grants."""
+    ca_total = db.query(GrantProgram).filter(
+        GrantProgram.id.like("ca_state_%")
+    ).count()
+    ca_active = db.query(GrantProgram).filter(
+        GrantProgram.id.like("ca_state_%"),
+        GrantProgram.is_active == True
+    ).count()
+
+    return {
+        "california": {
+            "total": ca_total,
+            "active": ca_active,
+            "source": "data.ca.gov"
+        },
+        "texas": {
+            "status": "coming_soon",
+            "note": "Requires multiple source integration"
+        },
+        "new_york": {
+            "status": "coming_soon",
+            "note": "Requires grants gateway registration"
+        },
+        "supported_states": ["CA"],
+        "planned_states": ["TX", "NY"]
+    }

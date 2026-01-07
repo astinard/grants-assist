@@ -49,6 +49,29 @@ def sync_grants_gov_job():
         db.close()
 
 
+def sync_state_grants_job():
+    """Job to sync grants from state portals daily."""
+    print(f"[{datetime.utcnow()}] Running state grants sync...")
+
+    db = SessionLocal()
+    try:
+        from app.services.state_grants_fetcher import sync_california_grants, create_california_fetcher
+
+        # Sync California grants
+        ca_stats = sync_california_grants(db)
+        print(f"[{datetime.utcnow()}] California sync: {ca_stats['imported']} imported, {ca_stats['updated']} updated")
+
+        # Mark expired California grants as inactive
+        fetcher = create_california_fetcher(db)
+        ca_expired = fetcher.mark_expired_inactive()
+        print(f"[{datetime.utcnow()}] Marked {ca_expired} expired CA grants as inactive")
+
+    except Exception as e:
+        print(f"[{datetime.utcnow()}] Error in state grants sync: {e}")
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """Initialize and start the background scheduler."""
     # Check for deadline reminders every day at 9 AM UTC
@@ -67,6 +90,16 @@ def start_scheduler():
         CronTrigger(hour=5, minute=0),
         id="grants_gov_sync",
         name="Sync grants from Grants.gov",
+        replace_existing=True
+    )
+
+    # Sync grants from state portals every day at 6 AM UTC
+    # Runs after Grants.gov sync, before deadline reminders
+    scheduler.add_job(
+        sync_state_grants_job,
+        CronTrigger(hour=6, minute=0),
+        id="state_grants_sync",
+        name="Sync grants from state portals",
         replace_existing=True
     )
 
