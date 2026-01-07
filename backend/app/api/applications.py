@@ -753,6 +753,85 @@ async def get_quality_score(
     }
 
 
+@router.get("/{app_id}/generation-readiness")
+async def check_generation_readiness(
+    app_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Check if sufficient data exists for quality grant generation.
+    Returns warnings for missing data that would result in generic content.
+    """
+    from app.services.context_assembler import ContextAssembler
+
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    assembler = ContextAssembler(db)
+    context = assembler.assemble_full_context(
+        user_id=current_user.id,
+        application_id=app_id,
+        program_id=app.program_id
+    )
+
+    org = context.get("organization", {})
+    summary = context.get("summary", {})
+
+    missing_critical = []
+    missing_recommended = []
+
+    # Critical fields - without these, output will be very generic
+    if not summary.get("organization_name"):
+        missing_critical.append("Organization name")
+    if not org.get("mission_statement"):
+        missing_critical.append("Mission statement")
+
+    # Recommended fields - improve quality significantly
+    if not org.get("founding_year"):
+        missing_recommended.append("Founding year")
+    if not org.get("staff_count"):
+        missing_recommended.append("Staff count")
+    if not org.get("annual_budget"):
+        missing_recommended.append("Annual budget")
+    if not org.get("clients_served_annually"):
+        missing_recommended.append("Clients served annually")
+    if not context.get("prior_grants"):
+        missing_recommended.append("Prior grant history")
+    if not context.get("achievements"):
+        missing_recommended.append("Organizational achievements")
+    if not context.get("community_data"):
+        missing_recommended.append("Community statistics/data")
+
+    # Calculate completeness score
+    total_fields = 9  # 2 critical + 7 recommended
+    filled = total_fields - len(missing_critical) - len(missing_recommended)
+    score = int((filled / total_fields) * 100)
+
+    return {
+        "ready": len(missing_critical) == 0,
+        "completeness_score": score,
+        "missing_critical": missing_critical,
+        "missing_recommended": missing_recommended,
+        "data_summary": {
+            "has_organization_name": bool(summary.get("organization_name")),
+            "has_mission": bool(org.get("mission_statement")),
+            "has_founding_year": bool(org.get("founding_year")),
+            "has_staff_info": bool(org.get("staff_count")),
+            "has_budget": bool(org.get("annual_budget")),
+            "prior_grants_count": len(context.get("prior_grants", [])),
+            "achievements_count": len(context.get("achievements", [])),
+            "community_data_count": sum(len(v) for v in context.get("community_data", {}).values()),
+        },
+        "message": "Ready for high-quality generation" if not missing_critical else f"Please add: {', '.join(missing_critical)}"
+    }
+
+
 @router.get("/{app_id}/professional-pdf")
 async def download_professional_pdf(
     app_id: str,

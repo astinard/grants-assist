@@ -6,6 +6,7 @@ Uses Google Gemini 2.0 Flash with optimized prompts and context.
 """
 
 import os
+import re
 import logging
 import json
 from typing import Dict, Any, List, Optional, Tuple
@@ -31,6 +32,147 @@ except ImportError:
     GOOGLE_API_KEY = None
     genai = None
     types = None
+
+
+class TemplateInterpolator:
+    """Replace placeholders with real data or graceful fallbacks."""
+
+    GRACEFUL_FALLBACKS = {
+        "[Organization Name]": "Our organization",
+        "[organization]": "our organization",
+        "[Grant Program]": "this funding opportunity",
+        "[year]": "our founding",
+        "[X] years": "several years",
+        "[X]": "several",
+        "[number]": "numerous",
+        "[amount]": "significant funding",
+        "[Geographic area]": "our service area",
+        "[target population]": "those we serve",
+        "[date]": "the project period",
+        "[Authorized Official Name]": "",
+        "[Title]": "",
+        "[email/phone]": "",
+    }
+
+    def interpolate(self, template: str, context: Dict[str, Any]) -> str:
+        """Replace all placeholders with real data or graceful text."""
+        org = context.get("organization", {})
+        summary = context.get("summary", {})
+        program = context.get("program", {})
+
+        # Build replacement map from real data
+        replacements = {
+            "[Organization Name]": summary.get("organization_name") or org.get("name"),
+            "[organization]": summary.get("organization_name") or org.get("name"),
+            "[Grant Program]": program.get("name"),
+            "[year]": str(org.get("founding_year")) if org.get("founding_year") else None,
+            "[X] years": self._format_years(org),
+            "[X]": None,  # Context-dependent
+            "[number]": str(org.get("clients_served_annually")) if org.get("clients_served_annually") else None,
+            "[amount]": self._format_currency(summary.get("total_prior_funding")),
+            "[Geographic area]": org.get("service_area") or org.get("location"),
+            "[geographic area]": org.get("service_area") or org.get("location"),
+            "[target population]": org.get("target_population"),
+            "[Authorized Official Name]": org.get("contact_name"),
+            "[Title]": org.get("contact_title"),
+            "[email/phone]": self._format_contact(org),
+            "[Location]": org.get("location"),
+            "[location]": org.get("location"),
+            "[mission statement]": org.get("mission_statement"),
+            "[mission]": org.get("mission_statement"),
+        }
+
+        result = template
+        for placeholder, value in replacements.items():
+            if value:
+                result = result.replace(placeholder, str(value))
+            elif placeholder in self.GRACEFUL_FALLBACKS:
+                fallback = self.GRACEFUL_FALLBACKS[placeholder]
+                if fallback:  # Only replace if fallback is non-empty
+                    result = result.replace(placeholder, fallback)
+                else:
+                    result = result.replace(placeholder, "")
+
+        return result
+
+    def _format_years(self, org: Dict) -> str:
+        years = org.get("years_in_operation")
+        founding = org.get("founding_year")
+        if years:
+            return f"{years} years"
+        elif founding:
+            calculated_years = datetime.now().year - founding
+            return f"{calculated_years} years"
+        return "several years"
+
+    def _format_currency(self, amount) -> str:
+        if amount and amount > 0:
+            return f"${amount:,.0f}"
+        return None
+
+    def _format_contact(self, org: Dict) -> str:
+        parts = []
+        if org.get("contact_email"):
+            parts.append(org["contact_email"])
+        if org.get("contact_phone"):
+            parts.append(org["contact_phone"])
+        return " / ".join(parts) if parts else None
+
+
+class ContentPostProcessor:
+    """Detect and fix remaining placeholders after generation."""
+
+    PLACEHOLDER_PATTERN = re.compile(r'\[[^\]]{1,50}\]')
+
+    SMART_REPLACEMENTS = {
+        r'\[X\]': 'several',
+        r'\[X%\]': 'a significant percentage',
+        r'\[\d+\]': 'many',
+        r'\[year\]': 'recently',
+        r'\[date\]': 'during the project period',
+        r'\[amount\]': 'substantial funding',
+        r'\[number\]': 'numerous',
+        r'\[describe [^\]]+\]': '',
+        r'\[brief [^\]]+\]': '',
+        r'\[specific [^\]]+\]': '',
+        r'\[insert [^\]]+\]': '',
+        r'\[list [^\]]+\]': '',
+        r'\[funder\'s\]': "the funder's",
+        r'\[funder\]': 'the funder',
+    }
+
+    def process(self, content: str, context: Dict[str, Any]) -> Tuple[str, List[str]]:
+        """Clean content and return warnings for replaced placeholders."""
+        warnings = []
+
+        # First pass: try to replace with real data
+        interpolator = TemplateInterpolator()
+        content = interpolator.interpolate(content, context)
+
+        # Second pass: find remaining placeholders
+        remaining = self.PLACEHOLDER_PATTERN.findall(content)
+
+        for placeholder in remaining:
+            # Try smart replacements
+            replaced = False
+            for pattern, replacement in self.SMART_REPLACEMENTS.items():
+                if re.match(pattern, placeholder, re.IGNORECASE):
+                    content = content.replace(placeholder, replacement)
+                    if replacement:
+                        warnings.append(f"Replaced '{placeholder}' with generic text")
+                    replaced = True
+                    break
+
+            if not replaced:
+                # Remove the placeholder entirely and warn
+                content = content.replace(placeholder, "")
+                warnings.append(f"Removed unfilled placeholder: {placeholder}")
+
+        # Clean up any double spaces or empty sentences
+        content = re.sub(r'  +', ' ', content)
+        content = re.sub(r'\n\n\n+', '\n\n', content)
+
+        return content, warnings
 
 
 # Section configuration with professional requirements
@@ -230,6 +372,12 @@ class ProfessionalAIWritingService:
 
         # Phase 4: Refine and polish
         final_content = await self._refine_content(section_type, draft, context, config)
+
+        # Phase 5: Post-process to remove any remaining placeholders
+        processor = ContentPostProcessor()
+        final_content, warnings = processor.process(final_content, context)
+        if warnings:
+            logger.info(f"Post-processing {section_type.value}: {warnings}")
 
         # Count words
         word_count = len(final_content.split())
@@ -537,6 +685,9 @@ Create a concise outline for maximum impact.
 
         base_context = self._format_base_context(context)
 
+        # Build mandatory data section - AI MUST use these exact values
+        mandatory_data = self._build_mandatory_data_section(context, section_type)
+
         # Include evidence based on section type
         evidence_context = ""
         if section_type == SectionType.STATEMENT_OF_NEED:
@@ -564,6 +715,8 @@ Write a {config.get('title', section_type.value)} section for this grant applica
 
 {base_context}
 
+{mandatory_data}
+
 {evidence_context}
 
 OUTLINE TO FOLLOW:
@@ -577,7 +730,7 @@ REQUIREMENTS:
 - Avoid jargon and ensure accessibility
 - Create smooth transitions between paragraphs
 - Every claim should be supported or supportable
-- DO NOT use placeholder text like [insert here] - write complete content
+- NEVER use placeholder text like [insert here] or [Organization Name] - write complete content using ONLY the data provided above
 
 Write the complete {config.get('title', section_type.value)} section now:
 """
@@ -755,6 +908,87 @@ Return the polished, refined version of the text:
 
         return "\n".join(lines) if lines else "No budget details available."
 
+    def _build_mandatory_data_section(self, context: Dict, section_type: SectionType) -> str:
+        """Build mandatory data that AI MUST include in output."""
+        org = context.get("organization", {})
+        summary = context.get("summary", {})
+        program = context.get("program", {})
+
+        lines = ["MANDATORY DATA - You MUST include these exact values in your response:"]
+
+        # Always required
+        if summary.get("organization_name"):
+            lines.append(f"- Organization Name: {summary['organization_name']}")
+        if program.get("name"):
+            lines.append(f"- Grant Program: {program['name']}")
+        if org.get("mission_statement"):
+            mission = org['mission_statement'][:200] + "..." if len(org.get('mission_statement', '')) > 200 else org['mission_statement']
+            lines.append(f"- Mission: {mission}")
+
+        # Section-specific mandatory data
+        if section_type in [SectionType.ORGANIZATIONAL_BACKGROUND, SectionType.EXECUTIVE_SUMMARY]:
+            if org.get("founding_year"):
+                lines.append(f"- Founded: {org['founding_year']}")
+            if org.get("staff_count"):
+                lines.append(f"- Staff Size: {org['staff_count']} employees")
+            if org.get("clients_served_annually"):
+                lines.append(f"- Clients Served: {org['clients_served_annually']:,} annually")
+            if summary.get("total_prior_funding") and summary["total_prior_funding"] > 0:
+                lines.append(f"- Prior Grant Funding: ${summary['total_prior_funding']:,.0f}")
+            if summary.get("prior_grants_count"):
+                lines.append(f"- Number of Prior Grants: {summary['prior_grants_count']}")
+
+        if section_type == SectionType.STATEMENT_OF_NEED:
+            community = context.get("community_data", {})
+            for data_type, items in community.items():
+                for item in items[:2]:
+                    if item.get("statistic") and item.get("source"):
+                        lines.append(f"- {data_type.replace('_', ' ').title()} Data: {item['statistic']} (Source: {item['source']})")
+
+        if section_type == SectionType.BUDGET_NARRATIVE:
+            budget = context.get("budget", {})
+            if budget.get("total_request"):
+                lines.append(f"- Total Budget Request: ${budget['total_request']:,.0f}")
+            for category, items in budget.get("by_category", {}).items():
+                category_total = sum(item.get("total", 0) for item in items)
+                if category_total > 0:
+                    lines.append(f"- {category.replace('_', ' ').title()}: ${category_total:,.0f}")
+
+        lines.append("")
+        lines.append("CRITICAL RULES:")
+        lines.append("- NEVER use [brackets] or placeholder text like [Organization Name] or [year]")
+        lines.append("- Use the EXACT values provided above - do not make up different numbers")
+        lines.append("- If data is not provided above, use natural language instead of placeholders")
+
+        return "\n".join(lines)
+
+    def _format_years_text(self, org: Dict) -> str:
+        """Format founding year as natural text."""
+        founding = org.get("founding_year")
+        years = org.get("years_in_operation")
+        if founding:
+            return f"in {founding}"
+        elif years:
+            return f"over {years} years ago"
+        return "several years ago"
+
+    def _format_community_data_narrative(self, community_data: Dict) -> str:
+        """Convert community data into narrative text."""
+        if not community_data:
+            return "Local data indicates significant unmet needs in our service area."
+
+        narratives = []
+        for data_type, items in community_data.items():
+            for item in items[:2]:  # Top 2 per category
+                if item.get("statistic") and item.get("source"):
+                    narratives.append(
+                        f"According to {item['source']}, {item['statistic']}."
+                    )
+
+        if narratives:
+            return " ".join(narratives)
+        return "Local data indicates significant unmet needs in our service area."
+
     async def _save_section(
         self,
         application_id: str,
@@ -792,75 +1026,102 @@ Return the polished, refined version of the text:
             self.db.rollback()
 
     def _get_fallback_content(self, section_type: SectionType, context: Dict[str, Any]) -> str:
-        """Return professional template when AI is unavailable."""
-        org_name = context.get("summary", {}).get("organization_name", "[Organization Name]")
-        program_name = context.get("program", {}).get("name", "[Grant Program]")
+        """Generate fallback content with real data interpolated."""
+        # Build dynamic data from context
+        org = context.get("organization", {})
+        summary = context.get("summary", {})
+        program = context.get("program", {})
 
-        fallbacks = {
+        org_name = summary.get("organization_name") or org.get("name") or "Our organization"
+        program_name = program.get("name") or "this grant program"
+        mission = org.get("mission_statement") or "serving our community"
+        years_text = self._format_years_text(org)
+        location = org.get("service_area") or org.get("location") or "our community"
+        staff_text = f"{org['staff_count']} dedicated staff members" if org.get("staff_count") else "our dedicated team"
+        budget_text = f"an annual operating budget of ${org['annual_budget']:,.0f}" if org.get("annual_budget") else "demonstrated financial capacity"
+        clients_text = f"serving {org['clients_served_annually']:,} individuals annually" if org.get("clients_served_annually") else "serving our community"
+        prior_funding_text = f"${summary['total_prior_funding']:,.0f} in prior grant funding" if summary.get("total_prior_funding") else "prior grant funding experience"
+        contact_name = org.get("contact_name") or "Executive Director"
+        contact_title = org.get("contact_title") or "Executive Director"
+        contact_info = ""
+        if org.get("contact_email"):
+            contact_info = org["contact_email"]
+        if org.get("contact_phone"):
+            contact_info = f"{contact_info} / {org['contact_phone']}" if contact_info else org["contact_phone"]
+
+        templates = {
             SectionType.COVER_LETTER: f"""
 Dear Grant Review Committee,
 
-{org_name} is pleased to submit this application for the {program_name} opportunity. Our organization has a demonstrated commitment to serving our community, and this funding would significantly enhance our capacity to deliver meaningful outcomes.
+{org_name} is pleased to submit this application for the {program_name}. We believe our {years_text} of experience, proven track record, and deep community roots make us an ideal partner for this initiative.
 
-We believe our track record, expertise, and strategic approach align well with the program's objectives. This application outlines our proposed project, expected outcomes, and organizational qualifications.
+Our mission—{mission}—drives everything we do. With {staff_text} and {budget_text}, we have built the organizational capacity to deliver meaningful results.
 
-We welcome the opportunity to discuss this proposal further and answer any questions you may have.
+We have carefully reviewed the program guidelines and are confident that our proposed project aligns with the funder's priorities. The enclosed application details our approach, qualifications, and the specific outcomes we will achieve.
 
-Respectfully submitted,
+Thank you for considering our application. We welcome the opportunity to discuss how we can work together to serve {location}.
 
-[Authorized Official Name]
-[Title]
+Sincerely,
+{contact_name}
+{contact_title}
 {org_name}
+{contact_info}
 """,
             SectionType.EXECUTIVE_SUMMARY: f"""
-{org_name} respectfully requests funding through the {program_name} to address critical needs in our service area. This project will [describe primary outcomes] through [brief methodology].
+{org_name} respectfully requests funding through the {program_name} to address critical needs in {location}.
 
-Our organization brings [X] years of experience in [relevant field], having successfully served [number] individuals and secured [amount] in prior grant funding. This demonstrated capacity positions us to execute the proposed project effectively.
+Our organization, founded {years_text}, has built a strong track record of {mission}. With {staff_text} and {budget_text}, we have the organizational capacity to execute this project effectively.
 
-With the requested funding, we will achieve [specific measurable outcomes] within [timeframe]. These outcomes directly align with [funder's] priorities and will create lasting positive impact in our community.
+We have successfully secured {prior_funding_text}, demonstrating our ability to manage grant funds responsibly and achieve measurable outcomes. This experience positions us to deliver on the objectives outlined in this proposal.
+
+The proposed project will directly benefit {location} by expanding our capacity to serve those most in need. We are confident that this investment will generate meaningful, lasting impact in our community.
 """,
             SectionType.ORGANIZATIONAL_BACKGROUND: f"""
-{org_name} was founded in [year] with a mission to [mission statement]. Over [X] years, we have grown from [origins] to become a [current description] serving [geographic area].
+{org_name} was established {years_text} with a mission of {mission}. Since our founding, we have grown to include {staff_text}, {clients_text}.
 
-Our organization currently operates [X] programs serving [number] individuals annually. Our team of [X] staff members and [X] volunteers brings expertise in [relevant areas].
+Our organization operates with {budget_text}, reflecting our commitment to sustainable growth and responsible stewardship of resources. We maintain strong financial management practices and have consistently received clean audits.
 
-We have successfully managed [amount] in grant funding from sources including [funders], demonstrating our capacity for fiscal responsibility and program delivery. Key accomplishments include [achievements].
+Over our history, we have secured {prior_funding_text}. These grants have enabled us to expand our programs, serve more community members, and build the infrastructure necessary for continued growth.
 
-Our strategic partnerships with [partners] strengthen our ability to serve the community effectively. This infrastructure positions us well to implement the proposed project.
+Our leadership team brings decades of combined experience in nonprofit management, program development, and community engagement. This expertise, combined with our deep roots in {location}, positions us to effectively implement the proposed project.
 """,
             SectionType.STATEMENT_OF_NEED: f"""
-[Geographic area] faces significant challenges that demand immediate attention. According to [source], [key statistic] of residents experience [problem], compared to [comparison statistic] nationally.
+{location} faces significant challenges that directly impact the wellbeing of community members. {org_name} has worked within this community {years_text} and has witnessed firsthand the growing need for services.
 
-The root causes of this disparity include [factors]. These conditions disproportionately affect [target population], creating barriers to [outcomes].
+{self._format_community_data_narrative(context.get("community_data", {}))}
 
-Current services in the region are insufficient to meet demand. [Evidence of service gap]. Without intervention, these conditions will continue to [negative trajectory].
+These challenges disproportionately affect vulnerable populations, creating barriers to stability and success. Without intervention, these trends will continue to worsen, placing additional strain on families and community resources.
 
-{org_name}'s proposed project directly addresses this need through [approach], targeting the most affected populations with evidence-based strategies.
+{org_name} is positioned to address these needs through our established programs and community relationships. The proposed project will directly target the root causes of these challenges, creating pathways to improved outcomes for those we serve.
 """,
             SectionType.PROJECT_DESCRIPTION: f"""
-{org_name} proposes to implement [project name] to address [need] in [service area]. This [duration] project will serve [number] individuals through [methodology].
+{org_name} proposes to implement a comprehensive project to address critical needs in {location}. This project will expand our capacity to serve community members through evidence-based approaches.
 
 Project Activities:
-Phase 1 (Months 1-3): [Activities]
-Phase 2 (Months 4-9): [Activities]
-Phase 3 (Months 10-12): [Activities]
+Phase 1 (Months 1-3): Project planning, staff hiring/training, partnership development, and outreach to target populations.
+Phase 2 (Months 4-9): Full program implementation with ongoing participant recruitment, service delivery, and data collection.
+Phase 3 (Months 10-12): Program sustainability planning, outcome evaluation, and dissemination of findings.
 
-Key personnel include [roles and qualifications]. Our partnership with [collaborators] provides [value].
+Our team of {staff_text} will lead implementation, supported by community partners. The project incorporates evidence-based practices that have demonstrated effectiveness in similar settings.
 
-The project incorporates evidence-based practices including [approaches], which have demonstrated effectiveness in similar settings.
-
-Expected deliverables include [outputs]. These activities will result in [outcomes] for program participants.
+Expected deliverables include increased service capacity, improved participant outcomes, and strengthened community partnerships. These activities will result in measurable positive change for program participants.
 """,
             SectionType.GOALS_OBJECTIVES: f"""
-Goal 1: [Broad outcome statement]
-- Objective 1.1: By [date], [X%] of participants will [measurable outcome], as measured by [data source].
-- Objective 1.2: By [date], [number] participants will [measurable outcome], as documented by [method].
+This project is designed to achieve measurable outcomes that align with the priorities of {program_name} and address the critical needs of {location}.
 
-Goal 2: [Broad outcome statement]
-- Objective 2.1: By [date], [X%] of participants will [measurable outcome], as measured by [data source].
-- Objective 2.2: By [date], [number] participants will [measurable outcome], as documented by [method].
+Goal 1: Expand service capacity to reach more community members in need.
+- Objective 1.1: Increase program enrollment by 25% within the first year of implementation.
+- Objective 1.2: Establish at least two new service delivery partnerships to improve geographic access.
 
-Performance will be tracked through [methods] with data reported [frequency].
+Goal 2: Improve outcomes for program participants.
+- Objective 2.1: Achieve documented improvement in participant outcomes for at least 75% of those served, as measured by standardized assessments.
+- Objective 2.2: Maintain participant retention rates of at least 80% through program completion.
+
+Goal 3: Strengthen organizational infrastructure for long-term sustainability.
+- Objective 3.1: Develop enhanced data collection and reporting systems within the first six months.
+- Objective 3.2: Provide professional development for all program staff within the grant period.
+
+All objectives follow SMART criteria and will be tracked through our comprehensive evaluation plan.
 """,
             SectionType.EVALUATION_PLAN: f"""
 {org_name} will implement a comprehensive evaluation plan to assess both process and outcomes.
@@ -871,53 +1132,57 @@ Evaluation Questions:
 3. How can the program be improved for greater impact?
 
 Methods:
-- Process Evaluation: [methods for tracking implementation]
-- Outcome Evaluation: [methods for measuring results]
+- Process Evaluation: Regular monitoring of implementation fidelity, participant enrollment, and service delivery metrics.
+- Outcome Evaluation: Pre/post assessments, participant surveys, and tracking of key performance indicators.
 
-Data Collection: [tools and timeline]
+Data Collection: Staff will collect data using standardized tools at intake, during services, and at program completion. Quarterly data reviews will inform continuous improvement.
 
-Analysis: Data will be analyzed [frequency] using [methods] to identify trends and inform continuous improvement.
+Analysis: Data will be analyzed quarterly using descriptive statistics and comparative analysis to identify trends and inform program adjustments.
 
-Findings will be used to [application] and shared with [stakeholders].
+Findings will be used to improve program delivery and shared with stakeholders through quarterly reports and an annual summary.
 """,
             SectionType.BUDGET_NARRATIVE: f"""
 The proposed budget reflects the true costs of implementing this project effectively while demonstrating responsible stewardship of grant funds.
 
-Personnel: Staff costs support [positions] essential for project implementation. Salaries are based on [methodology] and include [X]% fringe benefits.
+Personnel: Staff costs support program implementation, including project coordination, direct service delivery, and administrative support. Salaries are based on market rates for our region and include standard fringe benefits.
 
-Travel: Travel costs support [purpose]. Rates are based on [GSA/organizational] standards.
+Travel: Travel costs support staff travel for service delivery, training, and partner meetings. Rates are based on federal GSA standards.
 
-Supplies: Materials support [activities] and are necessary for [outcomes].
+Supplies: Program materials support direct service activities and are necessary for achieving project outcomes.
 
-Contractual: [Contracted services] provide [value/expertise] not available internally.
+Contractual: Professional services provide specialized expertise not available internally, including evaluation support and technical assistance.
 
-All costs are reasonable, allowable, and directly connected to achieving project objectives. Cost-sharing of [amount/percentage] demonstrates organizational commitment.
+All costs are reasonable, allowable, and directly connected to achieving project objectives. {org_name} demonstrates organizational commitment through in-kind contributions and leveraged resources.
 """,
             SectionType.SUSTAINABILITY_PLAN: f"""
 {org_name} is committed to sustaining project outcomes beyond the grant period through multiple strategies:
 
-Diversified Funding: We will pursue [funding sources] to continue operations. Our development plan includes [strategies].
+Diversified Funding: We will pursue additional grant opportunities, corporate partnerships, and individual donations to continue operations. Our development plan includes cultivation of new funding relationships during the grant period.
 
-Revenue Generation: [If applicable, describe earned revenue approaches]
+Community Support: Strong relationships with local stakeholders, including government agencies, businesses, and community organizations, provide ongoing resources and support.
 
-Partnerships: Collaboration with [partners] will provide ongoing resources and support.
+Capacity Building: Grant activities will strengthen organizational infrastructure through improved systems, trained staff, and enhanced partnerships that will continue beyond the funding period.
 
-Capacity Building: Grant activities will strengthen organizational infrastructure through [specific improvements].
+Long-term Impact: The project will contribute to lasting change by building community capacity, strengthening partnerships, and documenting effective practices for replication.
 
-Systems Change: The project will contribute to [policy/practice changes] that create lasting impact.
-
-By grant end, we will have established [sustainability mechanisms] to ensure continued service delivery.
+By grant end, we will have established sustainable mechanisms to ensure continued service delivery and ongoing impact in {location}.
 """,
             SectionType.CONCLUSION: f"""
-{org_name} is prepared to execute this project effectively and achieve meaningful outcomes for [target population]. Our experience, partnerships, and commitment position us as a strong steward of these funds.
+{org_name} is prepared to execute this project effectively and achieve meaningful outcomes for those we serve. Our {years_text} of experience, established partnerships, and commitment to excellence position us as a strong steward of these funds.
 
-This investment will result in [key outcomes], creating lasting positive change in our community. We are grateful for your consideration and confident in our ability to deliver on these promises.
+This investment will result in expanded services, improved participant outcomes, and strengthened community capacity, creating lasting positive change in {location}. We are grateful for your consideration and confident in our ability to deliver on these promises.
 
-We welcome the opportunity to discuss this proposal further. Please contact [name] at [email/phone] with questions.
+We welcome the opportunity to discuss this proposal further. Please contact {contact_name} at {contact_info if contact_info else 'our office'} with any questions.
 """,
         }
 
-        return fallbacks.get(section_type, f"[Please complete the {section_type.value} section]").strip()
+        template = templates.get(section_type, f"{org_name} is committed to excellence in serving {location}.")
+
+        # Post-process to clean any remaining placeholders
+        processor = ContentPostProcessor()
+        content, _ = processor.process(template.strip(), context)
+
+        return content
 
 
 # Factory function for creating service instance
