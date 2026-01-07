@@ -143,6 +143,75 @@ async def get_program_stats(db: Session = Depends(get_db)):
     }
 
 
+# ============ Eligibility Matching ============
+
+class MatchedGrantResponse(BaseModel):
+    """Grant with match score."""
+    grant: ProgramResponse
+    score: int
+    status: str
+    breakdown: dict
+    notes: list
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/matched/{user_id}")
+async def get_matched_grants(
+    user_id: str,
+    min_score: int = 30,
+    category: Optional[GrantCategory] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Get grants ranked by eligibility match score for a user.
+
+    The matching algorithm considers:
+    - Organization type alignment (40 pts)
+    - Award size fit (25 pts)
+    - Category relevance (20 pts)
+    - Geographic eligibility (15 pts)
+
+    Args:
+        user_id: The user's ID
+        min_score: Minimum match score (0-100), default 30
+        category: Optional category filter
+        limit: Max results, default 50
+
+    Returns:
+        List of grants with match scores, sorted by score descending
+    """
+    from app.services.eligibility_matcher import create_eligibility_matcher
+
+    matcher = create_eligibility_matcher(db)
+    results = matcher.get_matched_grants(
+        user_id=user_id,
+        min_score=min_score,
+        category=category,
+        limit=limit
+    )
+
+    # Convert to response format
+    response = []
+    for item in results:
+        grant = item["grant"]
+        match = item["match"]
+        response.append({
+            "grant": build_program_response(grant),
+            "score": match["score"],
+            "status": match["status"],
+            "breakdown": match["breakdown"],
+            "notes": match["notes"],
+        })
+
+    return {
+        "total": len(response),
+        "matched_grants": response,
+    }
+
+
 @router.get("/{program_id}", response_model=ProgramResponse)
 async def get_program(program_id: str, db: Session = Depends(get_db)):
     """Get a specific program by ID."""
