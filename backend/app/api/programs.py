@@ -212,6 +212,40 @@ async def get_matched_grants(
     }
 
 
+# ============ State Grants Stats ============
+
+@router.get("/state-stats")
+async def get_state_grant_stats(db: Session = Depends(get_db)):
+    """Get statistics about state-level grants."""
+    ca_total = db.query(GrantProgram).filter(
+        GrantProgram.id.like("ca_state_%")
+    ).count()
+    ca_active = db.query(GrantProgram).filter(
+        GrantProgram.id.like("ca_state_%"),
+        GrantProgram.is_active == True
+    ).count()
+
+    return {
+        "california": {
+            "total": ca_total,
+            "active": ca_active,
+            "source": "data.ca.gov"
+        },
+        "texas": {
+            "status": "coming_soon",
+            "note": "Requires multiple source integration"
+        },
+        "new_york": {
+            "status": "coming_soon",
+            "note": "Requires grants gateway registration"
+        },
+        "supported_states": ["CA"],
+        "planned_states": ["TX", "NY"]
+    }
+
+
+# ============ Program Detail Endpoints (must come after specific routes) ============
+
 @router.get("/{program_id}", response_model=ProgramResponse)
 async def get_program(program_id: str, db: Session = Depends(get_db)):
     """Get a specific program by ID."""
@@ -534,33 +568,3 @@ async def sync_state_grants(
             status_code=400,
             detail=f"State '{state}' not yet supported. Currently available: CA"
         )
-
-
-@router.get("/state-stats")
-async def get_state_grant_stats(db: Session = Depends(get_db)):
-    """Get statistics about state-level grants."""
-    ca_total = db.query(GrantProgram).filter(
-        GrantProgram.id.like("ca_state_%")
-    ).count()
-    ca_active = db.query(GrantProgram).filter(
-        GrantProgram.id.like("ca_state_%"),
-        GrantProgram.is_active == True
-    ).count()
-
-    return {
-        "california": {
-            "total": ca_total,
-            "active": ca_active,
-            "source": "data.ca.gov"
-        },
-        "texas": {
-            "status": "coming_soon",
-            "note": "Requires multiple source integration"
-        },
-        "new_york": {
-            "status": "coming_soon",
-            "note": "Requires grants gateway registration"
-        },
-        "supported_states": ["CA"],
-        "planned_states": ["TX", "NY"]
-    }
