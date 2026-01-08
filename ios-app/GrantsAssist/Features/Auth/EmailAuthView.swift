@@ -157,8 +157,8 @@ struct EmailAuthView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(leading: Button("Cancel") { dismiss() })
-            .onChange(of: authService.isAuthenticated) { isAuthenticated in
-                if isAuthenticated {
+            .onChange(of: authService.isAuthenticated) { newValue in
+                if newValue {
                     dismiss()
                 }
             }
