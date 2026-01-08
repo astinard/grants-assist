@@ -34,6 +34,7 @@ pypdf>=3.17.0
 
 # AI Integration
 google-genai>=1.50.0
+anthropic>=0.40.0
 
 # Utilities
 python-dotenv>=1.0.0

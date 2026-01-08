@@ -43,6 +43,10 @@
 		FE0A8DE0DB21BD5F159A8BA4 /* SmartMatchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F1FF607451254597A9159B /* SmartMatchService.swift */; };
 		0C18C7BDE43E5BC6FB02AF13 /* SmartOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CC1681B50DC8DC40830FD09 /* SmartOnboardingView.swift */; };
 		8D5721246A8F3AE1FF8A9898 /* SmartOnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B28CF57D5604522F225D0A41 /* SmartOnboardingViewModel.swift */; };
+		2BA511B13C674C89B9BB1E05 /* AIWriterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C415ED8AAB48A39583850D /* AIWriterService.swift */; };
+		0CDC803EA1EB4073808F99E4 /* AIWriterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7316F263DBA94913A4FF65DA /* AIWriterView.swift */; };
+		D176254432F04A1197635552 /* AIWriterViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68E8C63CBE6848A58AF54DFA /* AIWriterViewModel.swift */; };
+		B0BDB62EFC9C4051ADB1A615 /* SectionEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE9BDF8D8414C6DADC5A462 /* SectionEditorView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +100,10 @@
 		D4F1FF607451254597A9159B /* SmartMatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMatchService.swift; sourceTree = "<group>"; };
 		2CC1681B50DC8DC40830FD09 /* SmartOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartOnboardingView.swift; sourceTree = "<group>"; };
 		B28CF57D5604522F225D0A41 /* SmartOnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartOnboardingViewModel.swift; sourceTree = "<group>"; };
+		31C415ED8AAB48A39583850D /* AIWriterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIWriterService.swift; sourceTree = "<group>"; };
+		7316F263DBA94913A4FF65DA /* AIWriterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIWriterView.swift; sourceTree = "<group>"; };
+		68E8C63CBE6848A58AF54DFA /* AIWriterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIWriterViewModel.swift; sourceTree = "<group>"; };
+		AEE9BDF8D8414C6DADC5A462 /* SectionEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionEditorView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -172,7 +180,8 @@
 				D4F1FF607451254597A9159B /* SmartMatchService.swift */,
 				BEB2C52E3338E4D377171DFE /* KeychainService.swift */,
 				99D788897F210E2FBA70487A /* NotificationService.swift */,
-			);
+			
+				31C415ED8AAB48A39583850D /* AIWriterService.swift */,);
 			path = Services;
 			sourceTree = "<group>";
 		};
@@ -270,7 +279,8 @@
 				BA05B1FBB554FCC2EC07B36E /* Eligibility */,
 				124D34A488DC34EAE111B61F /* Profile */,
 				7E84FFF2D7990C3B443D159C /* Settings */,
-			);
+			
+				42AA33CA24B84441A90EFA01 /* AIWriter */,);
 			path = Features;
 			sourceTree = "<group>";
 		};
@@ -295,6 +305,17 @@
 				B28CF57D5604522F225D0A41 /* SmartOnboardingViewModel.swift */,
 			);
 			path = SmartMatch;
+			sourceTree = "<group>";
+		};
+
+		42AA33CA24B84441A90EFA01 /* AIWriter */ = {
+			isa = PBXGroup;
+			children = (
+				7316F263DBA94913A4FF65DA /* AIWriterView.swift */,
+				68E8C63CBE6848A58AF54DFA /* AIWriterViewModel.swift */,
+				AEE9BDF8D8414C6DADC5A462 /* SectionEditorView.swift */,
+			);
+			path = AIWriter;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -422,7 +443,11 @@
 				46E27F347D5DFECF1C2946FB /* SettingsView.swift in Sources */,
 				0D4080FA18C1683FDB8C83A1 /* User.swift in Sources */,
 				29D1844AD97D4D9CAFDF0597 /* View+Extensions.swift in Sources */,
-			);
+			
+				2BA511B13C674C89B9BB1E05 /* AIWriterService.swift in Sources */,
+				0CDC803EA1EB4073808F99E4 /* AIWriterView.swift in Sources */,
+				D176254432F04A1197635552 /* AIWriterViewModel.swift in Sources */,
+				B0BDB62EFC9C4051ADB1A615 /* SectionEditorView.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D24C5EF4AD12544A2B782ADC /* Sources */ = {

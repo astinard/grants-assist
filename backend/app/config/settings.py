@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # External APIs
     google_api_key: str = ""
     census_api_key: str = ""
+    anthropic_api_key: str = ""
 
     # RevenueCat (for subscription validation)
     revenuecat_api_key: str = ""

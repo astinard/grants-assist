@@ -3,6 +3,7 @@ import SwiftUI
 struct ApplicationDetailView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var viewModel: ApplicationDetailViewModel
+    @State private var showingAIWriter = false
 
     init(application: Application) {
         _viewModel = StateObject(wrappedValue: ApplicationDetailViewModel(application: application))
@@ -152,27 +153,70 @@ struct ApplicationDetailView: View {
                 Spacer()
             }
 
-            Text("Generate professional narratives for your grant application using AI.")
+            Text("Generate professional grant narratives section by section using AI.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
+            // Full AI Writer Button
+            Button {
+                showingAIWriter = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "sparkles")
+                        .font(.title2)
+                        .foregroundStyle(.yellow)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open AI Writer")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text("Generate all 10 grant sections")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                .padding()
+                .background(
+                    LinearGradient(
+                        colors: [.purple, .blue],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+            }
+            .sheet(isPresented: $showingAIWriter) {
+                NavigationStack {
+                    AIWriterView(
+                        applicationId: viewModel.application.id,
+                        programName: viewModel.application.programName
+                    )
+                }
+            }
+
+            // Quick Generate Button (legacy)
             Button {
                 Task { await viewModel.generateNarratives() }
             } label: {
                 HStack {
                     if viewModel.isGeneratingNarratives {
                         ProgressView()
-                            .tint(.white)
+                            .tint(.primary)
                         Text("Generating...")
                     } else {
-                        Image(systemName: "sparkles")
-                        Text("Generate Narratives")
+                        Image(systemName: "bolt.fill")
+                        Text("Quick Generate (Basic)")
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(Color.purple)
-                .foregroundStyle(.white)
+                .background(Color(.systemGray5))
+                .foregroundStyle(.primary)
                 .cornerRadius(12)
             }
             .disabled(viewModel.isGeneratingNarratives)
