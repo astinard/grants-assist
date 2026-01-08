@@ -12,6 +12,7 @@ Cost: FREE
 
 import io
 import csv
+import hashlib
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -278,9 +279,21 @@ class CaliforniaGrantsFetcher:
 
     def _upsert_grant(self, grant: Dict) -> None:
         """Insert or update a grant in the database."""
-        # Use _id (CKAN row number) as the unique identifier - guaranteed unique
-        ckan_id = grant.get('_id', 'unknown')
-        grant_id = f"ca_state_{ckan_id}"
+        # Use GrantID if available, otherwise create stable hash from title+agency
+        # CKAN _id is unreliable as it changes when data is re-uploaded
+        grant_id_field = grant.get('GrantID') or grant.get('grantID') or grant.get('grant_id')
+
+        if grant_id_field:
+            # Clean the GrantID - remove spaces and special chars
+            clean_id = str(grant_id_field).strip().replace(' ', '_').replace('/', '-')[:50]
+            grant_id = f"ca_state_{clean_id}"
+        else:
+            # Fallback: create stable hash from title + agency
+            title = (grant.get('Title') or 'unknown')[:100]
+            agency = (grant.get('AgencyDept') or 'unknown')[:50]
+            hash_input = f"{title}|{agency}".lower()
+            hash_value = hashlib.md5(hash_input.encode()).hexdigest()[:12]
+            grant_id = f"ca_state_hash_{hash_value}"
 
         existing = self.db.query(GrantProgram).filter(
             GrantProgram.id == grant_id

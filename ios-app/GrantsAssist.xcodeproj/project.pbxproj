@@ -39,6 +39,10 @@
 		F2C3C5F026AB78B733ACFE45 /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEB520A5EECA0E55F7DE2C6E /* DiscoveryView.swift */; };
 		FB77BF5F34DE60F70167B328 /* Grant.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EA1683BC8E956ACFAEC0921 /* Grant.swift */; };
 		FEB7B659DFCE3D181BA2C356 /* GrantsAssistApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159F0D61F0FEC1514B6775B7 /* GrantsAssistApp.swift */; };
+		1A8BF38D119BE85313C31624 /* SmartMatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7860FA5508950DBAB0FBC8 /* SmartMatch.swift */; };
+		FE0A8DE0DB21BD5F159A8BA4 /* SmartMatchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4F1FF607451254597A9159B /* SmartMatchService.swift */; };
+		0C18C7BDE43E5BC6FB02AF13 /* SmartOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CC1681B50DC8DC40830FD09 /* SmartOnboardingView.swift */; };
+		8D5721246A8F3AE1FF8A9898 /* SmartOnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B28CF57D5604522F225D0A41 /* SmartOnboardingViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,6 +92,10 @@
 		ED92F07A9852E8B8EAABEEE7 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		F8E18873BD5BD6C7538FFC13 /* GrantsAssist.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GrantsAssist.entitlements; sourceTree = "<group>"; };
 		FEB520A5EECA0E55F7DE2C6E /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
+		CA7860FA5508950DBAB0FBC8 /* SmartMatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMatch.swift; sourceTree = "<group>"; };
+		D4F1FF607451254597A9159B /* SmartMatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartMatchService.swift; sourceTree = "<group>"; };
+		2CC1681B50DC8DC40830FD09 /* SmartOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartOnboardingView.swift; sourceTree = "<group>"; };
+		B28CF57D5604522F225D0A41 /* SmartOnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmartOnboardingViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -123,6 +131,7 @@
 			isa = PBXGroup;
 			children = (
 				8F8FCCE0CE068870E098D8A6 /* Application.swift */,
+				CA7860FA5508950DBAB0FBC8 /* SmartMatch.swift */,
 				1FD4DD4A4AB8FA251DA25432 /* Eligibility.swift */,
 				7EA1683BC8E956ACFAEC0921 /* Grant.swift */,
 				C963AF7D81BDE73BC9AFDE94 /* User.swift */,
@@ -160,6 +169,7 @@
 			isa = PBXGroup;
 			children = (
 				599843A8F8A41ED7856B6C9E /* AuthService.swift */,
+				D4F1FF607451254597A9159B /* SmartMatchService.swift */,
 				BEB2C52E3338E4D377171DFE /* KeychainService.swift */,
 				99D788897F210E2FBA70487A /* NotificationService.swift */,
 			);
@@ -254,6 +264,7 @@
 			isa = PBXGroup;
 			children = (
 				0237BFC278882808121FBDCA /* Applications */,
+				C98E711ECBAB6B89C9497616 /* SmartMatch */,
 				83CBC7218A9438562574FD38 /* Auth */,
 				93C44AD47298FB3056ABBE92 /* Discovery */,
 				BA05B1FBB554FCC2EC07B36E /* Eligibility */,
@@ -275,6 +286,15 @@
 				0A9B643E761C3958BD7F0B3D /* Shared */,
 			);
 			path = GrantsAssist;
+			sourceTree = "<group>";
+		};
+		C98E711ECBAB6B89C9497616 /* SmartMatch */ = {
+			isa = PBXGroup;
+			children = (
+				2CC1681B50DC8DC40830FD09 /* SmartOnboardingView.swift */,
+				B28CF57D5604522F225D0A41 /* SmartOnboardingViewModel.swift */,
+			);
+			path = SmartMatch;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -387,6 +407,10 @@
 				5A58EAA2DCF42E5A1843558F /* EmailAuthView.swift in Sources */,
 				8A6AB4CD5EA76D7DD2F13809 /* EmptyStateView.swift in Sources */,
 				B3B0773D98849FCD84F15FB0 /* Endpoints.swift in Sources */,
+				1A8BF38D119BE85313C31624 /* SmartMatch.swift in Sources */,
+				FE0A8DE0DB21BD5F159A8BA4 /* SmartMatchService.swift in Sources */,
+				0C18C7BDE43E5BC6FB02AF13 /* SmartOnboardingView.swift in Sources */,
+				8D5721246A8F3AE1FF8A9898 /* SmartOnboardingViewModel.swift in Sources */,
 				FB77BF5F34DE60F70167B328 /* Grant.swift in Sources */,
 				FEB7B659DFCE3D181BA2C356 /* GrantsAssistApp.swift in Sources */,
 				0FBD69CC512236C83565497E /* KeychainService.swift in Sources */,

@@ -3,11 +3,15 @@ import SwiftUI
 struct DiscoveryView: View {
     @StateObject private var viewModel = DiscoveryViewModel()
     @State private var showingProgramDetail: GrantProgram?
+    @State private var showingSmartOnboarding = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    // Smart Match CTA
+                    smartMatchBanner
+
                     // Search Bar
                     searchBar
 
@@ -31,7 +35,49 @@ struct DiscoveryView: View {
             .sheet(item: $showingProgramDetail) { program in
                 ProgramDetailView(program: program, eligibility: viewModel.eligibilityResults[program.id])
             }
+            .sheet(isPresented: $showingSmartOnboarding) {
+                SmartOnboardingView()
+            }
         }
+    }
+
+    // MARK: - Smart Match Banner
+
+    private var smartMatchBanner: some View {
+        Button {
+            showingSmartOnboarding = true
+        } label: {
+            HStack(spacing: 16) {
+                Image(systemName: "sparkles")
+                    .font(.title)
+                    .foregroundStyle(.yellow)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Find Your Perfect Grant")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Answer 5 questions, get your top 3 matches")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            .padding()
+            .background(
+                LinearGradient(
+                    colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(16)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
     }
 
     // MARK: - Search Bar
