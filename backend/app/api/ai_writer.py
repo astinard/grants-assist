@@ -581,6 +581,24 @@ async def generate_full_application_with_agent(
 
         db.commit()
 
+        # Update completeness score based on sections generated
+        # 7 key sections out of 10 total = 70% base, plus quality bonus
+        total_sections = 10  # Total possible sections
+        generated_sections = result["section_count"]
+        completeness = min(100.0, (generated_sections / total_sections) * 100)
+
+        # Add quality bonus for word count (max 30 points)
+        if result["word_count"] > 5000:
+            completeness = min(100.0, completeness + 30)
+        elif result["word_count"] > 3000:
+            completeness = min(100.0, completeness + 20)
+        elif result["word_count"] > 1500:
+            completeness = min(100.0, completeness + 10)
+
+        app.completeness_score = completeness
+        app.status = ApplicationStatus.IN_PROGRESS
+        db.commit()
+
         return {
             "application_id": app_id,
             "grant_id": app.program_id,
@@ -590,6 +608,7 @@ async def generate_full_application_with_agent(
             "section_count": result["section_count"],
             "full_application": result["full_application"],
             "sections": list(result["sections"].keys()),
+            "completeness_score": completeness,
             "message": "Complete application generated successfully"
         }
 
