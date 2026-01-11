@@ -8,7 +8,7 @@ from app.config.settings import settings
 from app.models.database import init_db
 from app.services.scheduler import start_scheduler, shutdown_scheduler
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"  # Added AI Agent for full application generation
 
 
 @asynccontextmanager
