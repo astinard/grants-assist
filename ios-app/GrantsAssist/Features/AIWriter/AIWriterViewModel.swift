@@ -17,6 +17,9 @@ final class AIWriterViewModel: ObservableObject {
 
     @Published var currentSection: SectionContentResponse?
     @Published var generationResult: GenerateSectionResponse?
+    @Published var fullApplicationResult: FullApplicationResponse?
+    @Published var isGeneratingFullApp = false
+    @Published var generationProgress: String = ""
 
     // MARK: - Properties
 
@@ -146,6 +149,36 @@ final class AIWriterViewModel: ObservableObject {
         }
 
         isGenerating = false
+    }
+
+    // MARK: - Generate Full Application with AI Agent
+
+    func generateFullApplication(projectTitle: String, projectSummary: String) async {
+        isGeneratingFullApp = true
+        generationProgress = "Starting AI agent..."
+        error = nil
+        fullApplicationResult = nil
+
+        do {
+            generationProgress = "Researching and writing..."
+
+            let result = try await service.generateFullApplication(
+                applicationId: applicationId,
+                projectTitle: projectTitle,
+                projectSummary: projectSummary
+            )
+
+            fullApplicationResult = result
+            generationProgress = "Complete!"
+
+            // Refresh status to show updated sections
+            await loadStatus()
+        } catch {
+            self.error = error.localizedDescription
+            generationProgress = ""
+        }
+
+        isGeneratingFullApp = false
     }
 
     // MARK: - Load Section Content

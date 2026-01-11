@@ -88,6 +88,25 @@ struct GenerateAllResponse: Codable {
     let estimatedPages: Double
 }
 
+// MARK: - Full Agent Application Models
+
+struct GenerateFullApplicationRequest: Codable {
+    let projectTitle: String
+    let projectSummary: String
+}
+
+struct FullApplicationResponse: Codable {
+    let applicationId: String
+    let grantId: String
+    let projectTitle: String
+    let generationTimeSeconds: Double
+    let wordCount: Int
+    let sectionCount: Int
+    let fullApplication: String
+    let sections: [String]
+    let message: String
+}
+
 // MARK: - AI Writer Endpoints
 
 enum AIWriterEndpoint: APIEndpoint {
@@ -98,6 +117,7 @@ enum AIWriterEndpoint: APIEndpoint {
     case generateAll(applicationId: String, tone: String?)
     case getSectionContent(applicationId: String, sectionType: String)
     case updateSection(applicationId: String, sectionType: String, content: String)
+    case generateFullAgent(applicationId: String, request: GenerateFullApplicationRequest)
 
     var path: String {
         switch self {
@@ -115,6 +135,8 @@ enum AIWriterEndpoint: APIEndpoint {
             return "/api/ai-writer/applications/\(appId)/sections/\(sectionType)"
         case .updateSection(let appId, let sectionType, _):
             return "/api/ai-writer/applications/\(appId)/sections/\(sectionType)"
+        case .generateFullAgent(let appId, _):
+            return "/api/ai-writer/applications/\(appId)/generate-full-agent"
         }
     }
 
@@ -122,7 +144,7 @@ enum AIWriterEndpoint: APIEndpoint {
         switch self {
         case .listSections, .getWritingStatus, .getSectionContent:
             return .get
-        case .generateSection, .improveSection, .generateAll:
+        case .generateSection, .improveSection, .generateAll, .generateFullAgent:
             return .post
         case .updateSection:
             return .put
@@ -149,6 +171,8 @@ enum AIWriterEndpoint: APIEndpoint {
             return try? JSONEncoder().encode(request)
         case .updateSection(_, _, let content):
             let request = UpdateSectionRequest(content: content)
+            return try? JSONEncoder().encode(request)
+        case .generateFullAgent(_, let request):
             return try? JSONEncoder().encode(request)
         default:
             return nil
@@ -263,6 +287,26 @@ final class AIWriterService: ObservableObject {
     ) async throws {
         try await apiClient.requestVoid(
             AIWriterEndpoint.updateSection(applicationId: applicationId, sectionType: sectionType, content: content)
+        )
+    }
+
+    // MARK: - Generate Full Application with AI Agent
+
+    /// Generate a complete grant application using the autonomous AI agent.
+    /// This researches requirements, gathers data, and writes all sections.
+    /// May take 30-60 seconds to complete.
+    func generateFullApplication(
+        applicationId: String,
+        projectTitle: String,
+        projectSummary: String
+    ) async throws -> FullApplicationResponse {
+        let request = GenerateFullApplicationRequest(
+            projectTitle: projectTitle,
+            projectSummary: projectSummary
+        )
+
+        return try await apiClient.request(
+            AIWriterEndpoint.generateFullAgent(applicationId: applicationId, request: request)
         )
     }
 }

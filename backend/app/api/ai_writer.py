@@ -485,3 +485,116 @@ async def update_section_content(
         "is_user_edited": True,
         "message": "Section saved successfully"
     }
+
+
+# ============ Agent-Based Full Application Generation ============
+
+class GenerateFullApplicationRequest(BaseModel):
+    """Request for full application generation via AI agent."""
+    project_title: str
+    project_summary: str
+
+
+class FullApplicationResponse(BaseModel):
+    """Response from full application generation."""
+    application_id: str
+    grant_id: str
+    project_title: str
+    generation_time_seconds: float
+    word_count: int
+    section_count: int
+    full_application: str
+    sections: dict
+
+
+@router.post("/applications/{app_id}/generate-full-agent")
+async def generate_full_application_with_agent(
+    app_id: str,
+    request: GenerateFullApplicationRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a complete grant application using the AI Agent.
+
+    This uses an autonomous agent that:
+    1. Researches grant requirements
+    2. Gathers organization context
+    3. Finds supporting statistics
+    4. Writes all sections with real data
+    5. Returns a complete, professional application
+
+    Note: This may take 30-60 seconds to complete.
+    """
+    from app.services.grant_agent import generate_grant_application
+
+    # Verify application ownership
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == current_user.id
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    try:
+        # Generate using agent
+        result = await generate_grant_application(
+            grant_id=app.program_id,
+            user_id=current_user.id,
+            project_title=request.project_title,
+            project_summary=request.project_summary,
+            db_session=db
+        )
+
+        # Store the generated application
+        app.generated_narrative = result["full_application"]
+        db.commit()
+
+        # Also store individual sections
+        for section_key, section_content in result["sections"].items():
+            try:
+                st = SectionType(section_key)
+                existing = db.query(ApplicationSection).filter(
+                    ApplicationSection.application_id == app_id,
+                    ApplicationSection.section_type == st
+                ).first()
+
+                word_count = len(section_content.split())
+
+                if existing:
+                    existing.content = section_content
+                    existing.word_count = word_count
+                    existing.generation_model = result["model"]
+                else:
+                    new_section = ApplicationSection(
+                        application_id=app_id,
+                        section_type=st,
+                        content=section_content,
+                        word_count=word_count,
+                        generation_model=result["model"]
+                    )
+                    db.add(new_section)
+            except ValueError:
+                # Skip sections that don't match our SectionType enum
+                pass
+
+        db.commit()
+
+        return {
+            "application_id": app_id,
+            "grant_id": app.program_id,
+            "project_title": result["project_title"],
+            "generation_time_seconds": result["generation_time_seconds"],
+            "word_count": result["word_count"],
+            "section_count": result["section_count"],
+            "full_application": result["full_application"],
+            "sections": list(result["sections"].keys()),
+            "message": "Complete application generated successfully"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate application: {str(e)}"
+        )
